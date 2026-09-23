@@ -1,12 +1,4 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  computeRecords,
-  computeActualRecords,
-  computePredictionRecord,
-  applyLiveResults,
-  countFinalized,
-  isFinalized,
-} from '../utils/records.js';
 import { loadLive, getResults, getEvaluation, getMe, savePredictions, setUserId } from '../utils/api.js';
 
 const STORAGE_KEY = 'nfl2026-picks';   // offline mirror of this user's picks
@@ -112,7 +104,6 @@ export function PicksProvider({ children }) {
       // with each other and with the NFL data source.
       if (data && data.games) {
         reachable.current = true;
-        applyLiveResults(data.games);
         const view = {
           updatedAt: data.updated_at || null,
           provider: data.provider || null,
@@ -142,7 +133,6 @@ export function PicksProvider({ children }) {
         // /results may return either { games: {...} } or a flat map
         const games = res && (res.games || res);
         if (games && Object.keys(games).length) {
-          applyLiveResults(games);
           resultsPulledAt = now;
           reachable.current = true;
           setLive((s) => ({ ...s, loaded: true }));
@@ -264,30 +254,25 @@ export function PicksProvider({ children }) {
     return map;
   }, [evaluation]);
 
-  // Projected records: the server's per-user table when reachable, otherwise the
-  // same calculation done locally so the site still works with the API down.
-  const records = useMemo(() => computeRecords(picks), [picks, live]);
-  const projectedRecords = useMemo(
-    () => (evaluation && evaluation.projected) || computeRecords(picks),
-    [evaluation, picks, live]
-  );
-  // Official NFL records: final games only, never a user's picks.
-  const actualRecords = useMemo(
-    () => (evaluation && evaluation.official) || computeActualRecords(),
-    [evaluation, picks, live]
-  );
-  // The user's own prediction record: correct/incorrect over finals only
-  const predictionRecord = useMemo(
-    () => (evaluation && evaluation.record) || computePredictionRecord(picks),
-    [evaluation, picks, live]
-  );
+  const finalGameIds = useMemo(() => {
+    const ids = new Set();
+    ((evaluation && evaluation.games) || []).forEach((row) => {
+      if (row && row.status === 'final') ids.add(row.game_id);
+    });
+    return ids;
+  }, [evaluation]);
+
+  const records = useMemo(() => (evaluation && evaluation.projected) || {}, [evaluation]);
+  const projectedRecords = useMemo(() => (evaluation && evaluation.projected) || {}, [evaluation]);
+  const actualRecords = useMemo(() => (evaluation && evaluation.official) || {}, [evaluation]);
+  const predictionRecord = useMemo(() => (evaluation && evaluation.record) || { correct: 0, incorrect: 0, none: 0, str: '0-0' }, [evaluation]);
   const aiRecord = useMemo(() => (evaluation && evaluation.aiRecord) || null, [evaluation]);
 
   const value = useMemo(
     () => {
       const totalPicked = Object.keys(picks).length;
-      const pickedNotFinal = Object.keys(picks).filter((id) => !isFinalized(id)).length;
-      const finalCount = countFinalized();
+      const pickedNotFinal = Object.keys(picks).filter((id) => !finalGameIds.has(id)).length;
+      const finalCount = finalGameIds.size || Number(live.finals || 0);
       return {
         picks,
         records,

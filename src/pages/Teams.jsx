@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import { usePicks } from '../context/PicksContext.jsx';
 import TeamLogo from '../components/TeamLogo.jsx';
-import { teams } from '../utils/records.js';
+import teamsData from '../data/teams.json';
 
 export default function Teams() {
   const { records } = usePicks();
-  const sorted = [...teams].sort((a, b) =>
+  const sorted = [...(teamsData || [])].sort((a, b) =>
     a.division.localeCompare(b.division) || a.name.localeCompare(b.name)
   );
 

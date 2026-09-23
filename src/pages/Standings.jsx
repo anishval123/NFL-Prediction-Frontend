@@ -4,7 +4,9 @@ import { usePicks } from '../context/PicksContext.jsx';
 import TeamLogo from '../components/TeamLogo.jsx';
 import TeamRecord from '../components/TeamRecord.jsx';
 import FeedStatus from '../components/FeedStatus.jsx';
-import { teams } from '../utils/records.js';
+import teamsData from '../data/teams.json';
+
+const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
 
 const MODES = [
   { key: 'division', label: 'Division' },
@@ -103,7 +105,7 @@ export default function Standings() {
 
   const rows = useMemo(
     () =>
-      teams.map((team) => ({
+      (teamsData || []).map((team) => ({
         team,
         rec: table[team.abbr] || { w: 0, l: 0, t: 0, pct: 0, str: '0-0' },
       })),

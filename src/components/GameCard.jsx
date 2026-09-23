@@ -1,27 +1,34 @@
+import { useEffect, useState } from 'react';
 import TeamLogo from './TeamLogo.jsx';
 import TeamRecord from './TeamRecord.jsx';
 import { usePicks } from '../context/PicksContext.jsx';
-import {
-  teamByAbbr,
-  gameState,
-  getFinal,
-  getLiveResult,
-  isTie,
-  predictionOutcome,
-  formatDate,
-} from '../utils/records.js';
-import snapshot from '../data/projections2026.json';
 
-/** The AI model's pick for every game, from its own exported projections. */
-const AI_PICKS = (() => {
-  const map = {};
-  Object.values(snapshot.weeks || {}).forEach((rows) => {
-    (rows || []).forEach((row) => {
-      if (row && row.game_id && row.predicted_winner) map[row.game_id] = row.predicted_winner;
-    });
+const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+
+async function fetchJson(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    cache: 'no-store',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+    },
+    ...options,
   });
-  return map;
-})();
+
+  if (!response.ok) {
+    throw new Error(`API ${path} -> ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function formatDate(date) {
+  if (!date) return 'TBD';
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(parsed);
+}
 
 /** How a graded prediction reads, in the site's existing chip styling. */
 const OUTCOMES = {
@@ -106,35 +113,72 @@ function TeamRow({ side, team, record, selected, won, disabled, score, onSelect 
     </button>
   );
 }
+
 export default function GameCard({ game, pick, records, onPick, onClear, index = 0 }) {
-  // Hooks run before any early return so the hook order never changes.
   const { evaluated, feedConnected } = usePicks();
-  const homeTeam = teamByAbbr[game.home_abbr];
-  const awayTeam = teamByAbbr[game.away_abbr];
+  const [teamMap, setTeamMap] = useState({});
+  const [backendLive, setBackendLive] = useState({});
+  const [backendEvaluation, setBackendEvaluation] = useState({});
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadBackendData() {
+      try {
+        const [teamsResponse, liveResponse, evalResponse] = await Promise.all([
+          fetchJson('/teams'),
+          fetchJson('/games/live'),
+          fetchJson('/predictions/evaluation'),
+        ]);
+
+        if (!active) return;
+
+        const nextTeams = {};
+        const teams = Array.isArray(teamsResponse) ? teamsResponse : teamsResponse?.teams || [];
+        teams.forEach((team) => {
+          if (team && team.abbr) nextTeams[team.abbr] = team;
+        });
+        setTeamMap(nextTeams);
+
+        const nextLive = (liveResponse && liveResponse.games) || {};
+        setBackendLive(nextLive);
+
+        const nextEvaluation = {};
+        (Array.isArray(evalResponse?.games) ? evalResponse.games : []).forEach((row) => {
+          if (row && row.game_id) nextEvaluation[row.game_id] = row;
+        });
+        setBackendEvaluation(nextEvaluation);
+      } catch (error) {
+        console.log('[GameCard] backend refresh failed', error && (error.message || error));
+      }
+    }
+
+    loadBackendData();
+    const timer = window.setInterval(loadBackendData, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [game && game.id, game && game.week]);
+
+  const homeTeam = teamMap[game.home_abbr] || null;
+  const awayTeam = teamMap[game.away_abbr] || null;
   if (!homeTeam || !awayTeam) return null;
 
-  const state = gameState(game);
-  const final = getFinal(game.id);          // FINAL games only
-  const liveRow = getLiveResult(game.id);   // in progress: shown, never counted
+  const liveRow = backendLive[game.id] || null;
+  const final = (liveRow && (liveRow.status === 'final' || liveRow.winner || liveRow.tie)) ? liveRow : null;
+  const state = !liveRow ? 'open' : final ? 'result' : liveRow.status === 'live' ? 'live' : 'pending';
   const locked = state !== 'open';
 
-  // The user's prediction is theirs for the season: it stays highlighted on the
-  // card and the actual result is reported alongside it, never instead of it.
   const userPick = pick || null;
-  const actualWinner = final && !isTie(final) ? final.winner : null;
-  // Verdicts come from the backend evaluation when it is reachable, and are
-  // computed from the same stored finals locally when it is not.
-  const grade = evaluated[game.id] || null;
-  const userOutcome = grade
-    ? grade.predictionResult
-    : (userPick ? predictionOutcome(game.id, userPick) : null);
-  const aiPick = (grade && grade.aiPrediction) || AI_PICKS[game.id] || null;
-  const aiOutcome = (grade && grade.aiResult)
-    || (aiPick ? predictionOutcome(game.id, aiPick) : null);
+  const actualWinner = final && !final.tie ? final.winner : null;
+  const grade = evaluated?.[game.id] || backendEvaluation[game.id] || null;
+  const userOutcome = grade ? grade.predictionResult : null;
+  const aiPick = grade ? grade.aiPrediction : null;
+  const aiOutcome = grade ? grade.aiResult : null;
   const scoreRow = final || liveRow;
   const showScores = Boolean(scoreRow && (scoreRow.home_score != null || scoreRow.away_score != null));
 
-  // "BUF 41 - DET 31", winning side first (ties list the home side first).
   let scoreLine = null;
   if (showScores && scoreRow.home_score != null && scoreRow.away_score != null) {
     const hs = scoreRow.home_score;
@@ -235,7 +279,6 @@ export default function GameCard({ game, pick, records, onPick, onClear, index =
         />
       </div>
 
-      {/* prediction vs actual result: the pick is kept, never overwritten */}
       {(userPick || scoreLine || state === 'result') && (
         <div className="space-y-0.5 border-t border-slate-100 px-3 py-2 text-[11px] dark:border-navy-800">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -6,13 +6,27 @@ import ModelProjection from '../components/ModelProjection.jsx';
 import SectionHeader from '../components/SectionHeader.jsx';
 import FeedStatus from '../components/FeedStatus.jsx';
 
+const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+
+// ⭐ BACKEND CALL — THIS IS ALL YOU NEED
+async function callModelPrediction(game) {
+  const res = await fetch(`${API_BASE}/predict`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ game })
+  });
+
+  const data = await res.json();
+  console.log("MODEL RESULT:", data);
+  return data;
+}
+
 export default function Week() {
   const { week } = useParams();
   const n = Number(week);
   const { picks, records, setPick, clearPick } = usePicks();
   const valid = Number.isInteger(n) && n >= 1 && n <= weekCount;
   const games = valid ? gamesForWeek(n) : [];
-  // Each game counts once: locked/final results from the live feed or a user pick
   const finalized = games.filter((g) => isLocked(g)).length;
   const decided = games.filter((g) => isLocked(g) || picks[g.id]).length;
   const picked = games.filter((g) => picks[g.id]).length;
@@ -63,7 +77,6 @@ export default function Week() {
             )}
           </div>
 
-          {/* where these results are coming from */}
           <div className="mt-3">
             <FeedStatus />
           </div>
@@ -89,13 +102,13 @@ export default function Week() {
         </div>
       </div>
 
-      {/* Section A: the pick 'em engine the user actually plays */}
+      {/* Section A: user predictions */}
       <section id="user-predictions" className="container-page scroll-mt-24 pb-12 pt-8">
         <SectionHeader
           eyebrow="Pick 'em · your system"
           title="User Predictions"
           tone="brand"
-          description="Tap a team on any unlocked card to lock your winner. Your records, the team pages and the standings rebuild from these picks plus real final scores, the moment anything changes."
+          description="Tap a team on any unlocked card to lock your winner."
           right={
             <span className="chip bg-brand/10 text-brand-dark dark:text-brand-light">
               {picked}<span className="text-slate-400 dark:text-slate-500"> / {games.length} picked</span>
@@ -110,15 +123,19 @@ export default function Week() {
               game={game}
               pick={picks[game.id]}
               records={records}
-              onPick={(gameId, abbr) => setPick(gameId, abbr)}
+
+              // ⭐ THIS LINE CALLS YOUR BACKEND
+              onPick={async (gameId, abbr) => {
+                setPick(gameId, abbr);
+                await callModelPrediction(game);
+              }}
+
               onClear={() => clearPick(game.id)}
               index={idx}
             />
           ))}
         </div>
       </section>
-
-      {/* AI Insight moved to its own top-level page: /ai-insight/:week */}
     </div>
   );
 }

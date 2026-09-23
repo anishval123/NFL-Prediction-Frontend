@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
 import { usePicks } from '../context/PicksContext.jsx';
 import TeamLogo from '../components/TeamLogo.jsx';
-import { weekCount, pickSummary, teamByAbbr } from '../utils/records.js';
+import teamsData from '../data/teams.json';
+
+const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
+const WEEK_COUNT = 18;
 
 const STATS = [
   { value: '272', label: 'Games', desc: 'every 2027 matchup' },
@@ -11,8 +14,17 @@ const STATS = [
 ];
 
 export default function Home() {
-  const { totalPicked, records, decidedCount, resetAll } = usePicks();
-  const summary = pickSummary(records);
+  const { totalPicked, records, decidedCount, resetAll, projectedRecords } = usePicks();
+  const leaderboard = Object.entries(projectedRecords || records || {})
+    .map(([abbr, rec]) => ({
+      abbr,
+      str: rec?.str || '0-0',
+      pct: rec?.pct || 0,
+      name: TEAM_BY_ABBR[abbr]?.name || abbr,
+      division: TEAM_BY_ABBR[abbr]?.division || 'NFL',
+    }))
+    .sort((a, b) => (b.pct || 0) - (a.pct || 0) || (b.str || '0-0').localeCompare(a.str || '0-0'))
+    .slice(0, 5);
   const pct = Math.round((decidedCount / 272) * 100);
 
   return (
@@ -112,27 +124,27 @@ export default function Home() {
               <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">from your picks + finals</span>
             </div>
             <ul className="mt-4 divide-y divide-slate-100 dark:divide-navy-800">
-              {summary.leaders.map((row, i) => (
+              {leaderboard.map((row, i) => (
                 <li key={row.abbr}>
                   <Link
                     to={`/team/${row.abbr}`}
                     className="group flex items-center gap-4 rounded-xl px-2 py-2.5 transition hover:bg-slate-50 dark:hover:bg-navy-800/60"
                   >
                     <span className="w-5 text-center font-display text-lg font-bold text-slate-300 dark:text-slate-500">{i + 1}</span>
-                    <TeamLogo team={teamByAbbr[row.abbr]} size={40} />
+                    <TeamLogo team={TEAM_BY_ABBR[row.abbr]} size={40} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-slate-900 group-hover:text-brand-dark dark:text-slate-100 dark:group-hover:text-white">
-                        {teamByAbbr[row.abbr]?.name}
+                        {row.name}
                       </span>
                       <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                        {teamByAbbr[row.abbr]?.division}
+                        {row.division}
                       </span>
                     </span>
                     <span className="chip bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">{row.str}</span>
                   </Link>
                 </li>
               ))}
-              {summary.leaders.length === 0 && (
+              {leaderboard.length === 0 && (
                 <li className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500 dark:bg-navy-800 dark:text-slate-400">
                   Pick some games and your projected winners will show up here.
                 </li>
@@ -145,10 +157,10 @@ export default function Home() {
       <section className="container-page pb-4">
         <div className="flex items-end justify-between gap-4">
           <h2 className="text-2xl font-bold uppercase tracking-wide text-navy-900 dark:text-white">Jump to a week</h2>
-          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">{weekCount} weeks · 272 games</span>
+          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">{WEEK_COUNT} weeks · 272 games</span>
         </div>
         <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-9">
-          {Array.from({ length: weekCount }, (_, i) => i + 1).map((wk) => (
+          {Array.from({ length: WEEK_COUNT }, (_, i) => i + 1).map((wk) => (
             <Link
               key={wk}
               to={`/week/${wk}`}

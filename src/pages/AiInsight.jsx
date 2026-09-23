@@ -1,21 +1,46 @@
+import { useEffect, useState } from 'react';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import SectionHeader from '../components/SectionHeader.jsx';
 import ModelProjection from '../components/ModelProjection.jsx';
-import { gamesForWeek, weekCount, formatDate, isLocked } from '../utils/records.js';
+
+const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+const WEEK_COUNT = 18;
+
+function formatRangeDate(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return dateString;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export default function AiInsight() {
   const { week } = useParams();
+  const [schedule, setSchedule] = useState([]);
+
+  useEffect(() => {
+    async function loadSchedule() {
+      try {
+        const res = await fetch(`${API_BASE}/schedule`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setSchedule(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('[ai-insight] schedule load error', err);
+      }
+    }
+    loadSchedule();
+  }, []);
 
   // If a week param is provided, render only that week. If not provided, render all weeks.
   if (week) {
     const n = Number(week);
-    const valid = Number.isInteger(n) && n >= 1 && n <= weekCount;
-    const games = valid ? gamesForWeek(n) : [];
+    const valid = Number.isInteger(n) && n >= 1 && n <= WEEK_COUNT;
+    const games = valid ? schedule.filter((g) => Number(g.week) === n) : [];
 
     if (!valid) return <Navigate to="/ai-insight/1" replace />;
 
-    const finalized = games.filter((g) => isLocked(g)).length;
-    const decided = games.filter((g) => isLocked(g)).length;
+    const finalized = games.filter((g) => g.status === 'final').length;
+    const decided = games.filter((g) => g.status === 'final').length;
     const range = games.length ? [games[0].date, games[games.length - 1].date] : null;
 
     function WeekPrevNext({ n }) {
@@ -30,8 +55,8 @@ export default function AiInsight() {
           </Link>
           <Link
             to={`/ai-insight/${n + 1}`}
-            className={`btn-primary px-3.5 ${n >= weekCount ? 'pointer-events-none opacity-40' : ''}`}
-            aria-disabled={n >= weekCount}
+            className={`btn-primary px-3.5 ${n >= WEEK_COUNT ? 'pointer-events-none opacity-40' : ''}`}
+            aria-disabled={n >= WEEK_COUNT}
           >
             Next →
           </Link>
@@ -51,7 +76,7 @@ export default function AiInsight() {
                 </h1>
                 {range && (
                   <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-                    {formatDate(range[0])} – {formatDate(range[1])}, 2027
+                    {formatRangeDate(range[0])} – {formatRangeDate(range[1])}, 2027
                   </p>
                 )}
               </div>
@@ -65,7 +90,7 @@ export default function AiInsight() {
 
         <div className="container-page pt-6">
           <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {Array.from({ length: weekCount }, (_, i) => i + 1).map((wk) => (
+            {Array.from({ length: WEEK_COUNT }, (_, i) => i + 1).map((wk) => (
               <Link
                 key={wk}
                 to={`/ai-insight/${wk}`}
@@ -120,7 +145,7 @@ export default function AiInsight() {
       />
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {Array.from({ length: weekCount }, (_, i) => i + 1).map((wk) => (
+        {Array.from({ length: WEEK_COUNT }, (_, i) => i + 1).map((wk) => (
           <Link
             key={wk}
             to={`/ai-insight/${wk}`}

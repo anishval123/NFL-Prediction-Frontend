@@ -1,7 +1,8 @@
 ﻿import { useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { usePicks } from '../context/PicksContext.jsx';
-import { weekCount } from '../utils/records.js';
+
+const WEEK_COUNT = 18;
 
 const NAV_LINKS = [
   { to: '/teams', label: 'Teams' },
@@ -30,7 +31,7 @@ function WeekDropdown({ open, onNavigate }) {
         </Link>
       </div>
       <div className="grid max-h-[300px] grid-cols-3 gap-1.5 overflow-y-auto pr-1">
-        {Array.from({ length: weekCount }, (_, i) => i + 1).map((wk) => (
+        {Array.from({ length: WEEK_COUNT }, (_, i) => i + 1).map((wk) => (
           <Link
             key={wk}
             to={`/week/${wk}`}
@@ -211,7 +212,7 @@ export default function Navbar() {
           <span className="block px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
             Your Predictions
           </span>
-          {Array.from({ length: weekCount }, (_, i) => i + 1).map((wk) => (
+          {Array.from({ length: WEEK_COUNT }, (_, i) => i + 1).map((wk) => (
             <Link
               key={wk}
               to={`/week/${wk}`}

@@ -1,5 +1,4 @@
 import { usePicks } from '../context/PicksContext.jsx';
-import { countFinalized } from '../utils/records.js';
 
 /**
  * Where the results are coming from, in one line.
@@ -10,7 +9,8 @@ import { countFinalized } from '../utils/records.js';
  */
 export default function FeedStatus({ className = '' }) {
   const { feedConnected, feedFinals, liveUpdatedAt, liveProvider } = usePicks();
-  const finals = typeof feedFinals === 'number' ? feedFinals : countFinalized();
+  const finals = typeof feedFinals === 'number' ? feedFinals : 0;
+  const backendLabel = import.meta.env.VITE_API_URL.replace(/\/$/, '');
 
   if (feedConnected) {
     return (
@@ -37,10 +37,7 @@ export default function FeedStatus({ className = '' }) {
         results feed offline
       </span>
       <span>
-        Showing {finals} stored final{finals === 1 ? '' : 's'} only. Start the backend
-        (<code className="font-semibold">start.bat</code>, or{' '}
-        <code className="font-semibold">uvicorn main:app --port 8000</code> in{' '}
-        <code className="font-semibold">backend/</code>) to load live scores and every final.
+        Showing {finals} stored final{finals === 1 ? '' : 's'} only. The configured backend ({backendLabel}) is currently unavailable.
       </span>
     </span>
   );

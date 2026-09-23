@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { teamByAbbr, getFinal, predictionOutcome } from '../utils/records.js';
+import teamsData from '../data/teams.json';
 import snapshot from '../data/projections2026.json';
+
+const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
 
 /** The AI model's own output, keyed by matchup, so its pick can be graded. */
 const AI_BY_PAIR = (() => {
@@ -48,8 +50,8 @@ function snapshotDate(iso) {
 }
 
 function ProjectionRow({ pred, grade, expanded, onToggle }) {
-  const t1 = teamByAbbr[pred.team_1];
-  const t2 = teamByAbbr[pred.team_2];
+  const t1 = TEAM_BY_ABBR[pred.team_1];
+  const t2 = TEAM_BY_ABBR[pred.team_2];
   const p1 = Math.round(pred.team_1_win_probability * 100);
   const p2 = 100 - p1;
   const favoursOne = pred.team_1_win_probability >= 0.5;
@@ -243,24 +245,25 @@ export default function ModelProjection({ week, games }) {
     rows.forEach((pred) => {
       const gameId = pred.game_id || AI_BY_PAIR[`${pred.team_1}-${pred.team_2}`];
       if (!gameId) return;
-      const finalRow = getFinal(gameId);
-      if (!finalRow) return;
-      const hs = finalRow.home_score;
-      const aws = finalRow.away_score;
+      const finalGame = games.find((game) => game.id === gameId || game.game_id === gameId);
+      if (!finalGame) return;
+      const hs = finalGame.home_score ?? finalGame.homeScore;
+      const aws = finalGame.away_score ?? finalGame.awayScore;
       let score = null;
       if (hs != null && aws != null) {
+        const winner = hs === aws ? 'tie' : hs > aws ? finalGame.home_abbr : finalGame.away_abbr;
         score = hs >= aws
-          ? `${pred.team_1} ${hs} - ${pred.team_2} ${aws}`
-          : `${pred.team_2} ${aws} - ${pred.team_1} ${hs}`;
+          ? `${finalGame.home_abbr} ${hs} - ${finalGame.away_abbr} ${aws}`
+          : `${finalGame.away_abbr} ${aws} - ${finalGame.home_abbr} ${hs}`;
+        map[`${pred.team_1}-${pred.team_2}`] = {
+          outcome: pred.predicted_winner === winner || (winner === 'tie' ? pred.predicted_winner === null : false) ? 'correct' : 'incorrect',
+          score,
+          winner: winner === 'tie' ? null : winner,
+        };
       }
-      map[`${pred.team_1}-${pred.team_2}`] = {
-        outcome: predictionOutcome(gameId, pred.predicted_winner),
-        score,
-        winner: finalRow.tie ? null : finalRow.winner,
-      };
     });
     return map;
-  }, [rows]);
+  }, [rows, games]);
 
   // Nothing stored for this week and the service has not answered yet.
   if (!rows.length && !liveTried) {

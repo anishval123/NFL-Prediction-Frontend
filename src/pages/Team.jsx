@@ -1,20 +1,39 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { usePicks } from '../context/PicksContext.jsx';
 import GameCard from '../components/GameCard.jsx';
 import TeamLogo from '../components/TeamLogo.jsx';
-import { allGames, teamByAbbr } from '../utils/records.js';
+import teamsData from '../data/teams.json';
+
+const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
 
 export default function Team() {
   const { abbr } = useParams();
   const code = abbr ? abbr.toUpperCase() : '';
-  const team = teamByAbbr[code];
+  const team = TEAM_BY_ABBR[code];
   const { picks, records, setPick, clearPick } = usePicks();
+  const [schedule, setSchedule] = useState([]);
+
+  useEffect(() => {
+    async function loadSchedule() {
+      try {
+        const res = await fetch(`${API_BASE}/schedule`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setSchedule(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('[team] schedule load error', err);
+      }
+    }
+    loadSchedule();
+  }, []);
 
   if (!team) return <Navigate to="/teams" replace />;
 
-  const games = allGames
+  const games = schedule
     .filter((g) => g.home_abbr === code || g.away_abbr === code)
-    .sort((a, b) => a.week - b.week);
+    .sort((a, b) => Number(a.week) - Number(b.week));
   const rec = records[code] || { w: 0, l: 0, str: '0-0', pct: 0 };
   const pickedGames = games.filter((g) => picks[g.id]).length;
   const { primary, secondary } = team.colors;

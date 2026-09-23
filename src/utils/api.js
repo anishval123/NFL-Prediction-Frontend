@@ -2,11 +2,15 @@
  *  The server stores each user's predictions; localStorage keeps only the
  *  identity token plus an offline mirror. */
 
-// Where the API lives. Set VITE_API_URL at build time when you deploy the
-// backend somewhere other than localhost, e.g. VITE_API_URL=https://api.example.com
-const ENV_URL = (typeof import.meta !== 'undefined' && import.meta.env
-  && import.meta.env.VITE_API_URL) || null;
-export const API_URL = ENV_URL || 'http://localhost:8000';
+function resolveApiBase() {
+  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
+    ? import.meta.env.VITE_API_URL
+    : '';
+
+  return envUrl.replace(/\/$/, '');
+}
+
+export const API_URL = resolveApiBase();
 
 // The signed-in browser's id. Set once by PicksContext so every call is made on
 // behalf of that user (the backend also falls back to the nfl_uid cookie).
