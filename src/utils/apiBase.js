@@ -22,9 +22,22 @@ function isLocalHost(host) {
     || /^10\.\d+\.\d+\.\d+$/.test(host);
 }
 
-export function resolveApiBase({ envUrl, hostname } = {}) {
+export function resolveApiBase({ envUrl, hostname, mode } = {}) {
   const fromEnv = typeof envUrl === 'string' ? envUrl.trim() : '';
   if (fromEnv) return fromEnv.replace(/\/+$/, '');
+
+  const runtimeMode = typeof mode === 'string' ? mode : (
+    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MODE)
+      ? import.meta.env.MODE
+      : ''
+  );
+
+  // Production builds must never silently fall back to localhost or a local IP.
+  // The public Vercel site should always target the deployed Render backend.
+  const isProductionMode = runtimeMode === 'production'
+    || (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD);
+
+  if (isProductionMode) return PRODUCTION_API_URL;
   return isLocalHost(hostname) ? LOCAL_API_URL : PRODUCTION_API_URL;
 }
 
@@ -34,6 +47,9 @@ export const API_URL = resolveApiBase({
     : '',
   hostname: (typeof window !== 'undefined' && window.location)
     ? window.location.hostname
+    : '',
+  mode: (typeof import.meta !== 'undefined' && import.meta.env)
+    ? import.meta.env.MODE
     : '',
 });
 

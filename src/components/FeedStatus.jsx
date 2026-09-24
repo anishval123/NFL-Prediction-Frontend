@@ -38,7 +38,7 @@ export default function FeedStatus({ className = '' }) {
         results feed offline
       </span>
       <span>
-        Showing {finals} stored final{finals === 1 ? '' : 's'} only. The configured backend ({backendLabel}) is currently unavailable.
+        The public results feed is currently unavailable. The site is configured to use {backendLabel}, but the backend is not responding right now.
       </span>
     </span>
   );
