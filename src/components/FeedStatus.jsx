@@ -1,4 +1,5 @@
 import { usePicks } from '../context/PicksContext.jsx';
+import { API_URL } from '../utils/apiBase.js';
 
 /**
  * Where the results are coming from, in one line.
@@ -10,7 +11,7 @@ import { usePicks } from '../context/PicksContext.jsx';
 export default function FeedStatus({ className = '' }) {
   const { feedConnected, feedFinals, liveUpdatedAt, liveProvider } = usePicks();
   const finals = typeof feedFinals === 'number' ? feedFinals : 0;
-  const backendLabel = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+  const backendLabel = API_URL.replace(/\/$/, '');
 
   if (feedConnected) {
     return (

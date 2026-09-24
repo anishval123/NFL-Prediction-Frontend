@@ -6,21 +6,6 @@ import ModelProjection from '../components/ModelProjection.jsx';
 import SectionHeader from '../components/SectionHeader.jsx';
 import FeedStatus from '../components/FeedStatus.jsx';
 
-const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
-
-// ⭐ BACKEND CALL — THIS IS ALL YOU NEED
-async function callModelPrediction(game) {
-  const res = await fetch(`${API_BASE}/predict`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ game })
-  });
-
-  const data = await res.json();
-  console.log("MODEL RESULT:", data);
-  return data;
-}
-
 export default function Week() {
   const { week } = useParams();
   const n = Number(week);
@@ -125,10 +110,7 @@ export default function Week() {
               records={records}
 
               // ⭐ THIS LINE CALLS YOUR BACKEND
-              onPick={async (gameId, abbr) => {
-                setPick(gameId, abbr);
-                await callModelPrediction(game);
-              }}
+              onPick={(gameId, abbr) => setPick(gameId, abbr)}
 
               onClear={() => clearPick(game.id)}
               index={idx}

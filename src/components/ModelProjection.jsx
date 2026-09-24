@@ -17,8 +17,27 @@ const AI_BY_PAIR = (() => {
   return map;
 })();
 
-/** ML service base URLs (the FastAPI service in ml-backend/, run on :8001). */
-const ML_ENDPOINTS = ['http://localhost:8001', 'http://127.0.0.1:8001'];
+/**
+ * ML service base URLs.
+ *
+ * Set VITE_ML_URL when the model service is deployed somewhere reachable. The
+ * localhost entries are development-only on purpose: on a deployed HTTPS site a
+ * call to `http://localhost:8001` would target the visitor's own machine and be
+ * blocked as mixed content anyway. With no ML service configured, the AI Insight
+ * section renders from the model's bundled snapshot instead.
+ */
+const ML_ENDPOINTS = (() => {
+  const configured = (typeof import.meta !== 'undefined' && import.meta.env
+    && import.meta.env.VITE_ML_URL) || '';
+  const list = configured ? [configured.trim().replace(/\/+$/, '')] : [];
+  const host = (typeof window !== 'undefined' && window.location)
+    ? window.location.hostname
+    : '';
+  if (!host || host === 'localhost' || host === '127.0.0.1') {
+    list.push('http://localhost:8001', 'http://127.0.0.1:8001');
+  }
+  return list;
+})();
 
 /** Explanation fields shown when a row is expanded, with display labels. */
 const FACETS = [

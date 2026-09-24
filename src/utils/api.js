@@ -2,15 +2,10 @@
  *  The server stores each user's predictions; localStorage keeps only the
  *  identity token plus an offline mirror. */
 
-function resolveApiBase() {
-  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
-    ? import.meta.env.VITE_API_URL
-    : '';
+import { API_URL } from './apiBase.js';
 
-  return envUrl.replace(/\/$/, '');
-}
-
-export const API_URL = resolveApiBase();
+// Re-exported so components share one definition of the backend URL.
+export { API_URL };
 
 // The signed-in browser's id. Set once by PicksContext so every call is made on
 // behalf of that user (the backend also falls back to the nfl_uid cookie).
@@ -24,14 +19,16 @@ async function request(path, options = {}) {
     // A cached response would keep a FINAL score hidden after a game ends, so
     // every call opts out of HTTP caching and carries a cache-busting stamp.
     const url = `${API_URL}${path}${path.includes('?') ? '&' : '?'}_=${Date.now()}`;
+    const headers = {
+      // Identifies the visitor to the per-user endpoints; the backend also
+      // accepts a cookie or ?user=.
+      ...(userId ? { 'X-User-Id': userId } : {}),
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    };
     const res = await fetch(url, {
       cache: 'no-store',
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-        ...(userId ? { 'X-User-Id': userId } : {}),
-      },
+      headers,
       ...options,
     });
     if (!res.ok) throw new Error(`API ${path} -> ${res.status}`);
@@ -39,7 +36,7 @@ async function request(path, options = {}) {
   } catch (err) {
     // never let API failures touch the UI; console.warn/info are not
     // supported everywhere, so use plain console.log
-    console.log('[api]', err && (err.message || err));
+    console.log('[api]', API_URL, err && (err.message || err));
     return null;
   }
 }

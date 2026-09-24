@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import SectionHeader from '../components/SectionHeader.jsx';
 import ModelProjection from '../components/ModelProjection.jsx';
+import { API_URL } from '../utils/apiBase.js';
 
-const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+const API_BASE = API_URL;
 const WEEK_COUNT = 18;
 
 function formatRangeDate(dateString) {

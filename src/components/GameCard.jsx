@@ -1,27 +1,31 @@
-import { useEffect, useState } from 'react';
 import TeamLogo from './TeamLogo.jsx';
 import TeamRecord from './TeamRecord.jsx';
 import { usePicks } from '../context/PicksContext.jsx';
+import {
+  teamByAbbr,
+  gameState,
+  getFinal,
+  getLiveResult,
+  isTie,
+  predictionOutcome,
+} from '../utils/records.js';
+import snapshot from '../data/projections2026.json';
 
-const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
-
-async function fetchJson(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    cache: 'no-store',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-    },
-    ...options,
+/**
+ * A game card renders from bundled team metadata plus the one results feed that
+ * PicksContext polls. Nothing here fetches per card: the previous version issued
+ * three API calls per card every 30 seconds, and hid the whole card whenever
+ * /teams could not be reached.
+ */
+const AI_PICKS = (() => {
+  const map = {};
+  Object.values(snapshot.weeks || {}).forEach((rows) => {
+    (rows || []).forEach((row) => {
+      if (row && row.game_id && row.predicted_winner) map[row.game_id] = row.predicted_winner;
+    });
   });
-
-  if (!response.ok) {
-    throw new Error(`API ${path} -> ${response.status}`);
-  }
-
-  return response.json();
-}
+  return map;
+})();
 
 function formatDate(date) {
   if (!date) return 'TBD';
@@ -116,66 +120,28 @@ function TeamRow({ side, team, record, selected, won, disabled, score, onSelect 
 
 export default function GameCard({ game, pick, records, onPick, onClear, index = 0 }) {
   const { evaluated, feedConnected } = usePicks();
-  const [teamMap, setTeamMap] = useState({});
-  const [backendLive, setBackendLive] = useState({});
-  const [backendEvaluation, setBackendEvaluation] = useState({});
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadBackendData() {
-      try {
-        const [teamsResponse, liveResponse, evalResponse] = await Promise.all([
-          fetchJson('/teams'),
-          fetchJson('/games/live'),
-          fetchJson('/predictions/evaluation'),
-        ]);
-
-        if (!active) return;
-
-        const nextTeams = {};
-        const teams = Array.isArray(teamsResponse) ? teamsResponse : teamsResponse?.teams || [];
-        teams.forEach((team) => {
-          if (team && team.abbr) nextTeams[team.abbr] = team;
-        });
-        setTeamMap(nextTeams);
-
-        const nextLive = (liveResponse && liveResponse.games) || {};
-        setBackendLive(nextLive);
-
-        const nextEvaluation = {};
-        (Array.isArray(evalResponse?.games) ? evalResponse.games : []).forEach((row) => {
-          if (row && row.game_id) nextEvaluation[row.game_id] = row;
-        });
-        setBackendEvaluation(nextEvaluation);
-      } catch (error) {
-        console.log('[GameCard] backend refresh failed', error && (error.message || error));
-      }
-    }
-
-    loadBackendData();
-    const timer = window.setInterval(loadBackendData, 30000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [game && game.id, game && game.week]);
-
-  const homeTeam = teamMap[game.home_abbr] || null;
-  const awayTeam = teamMap[game.away_abbr] || null;
+  // Bundled team metadata, so a card can always render even if the API is down.
+  const homeTeam = teamByAbbr[game.home_abbr];
+  const awayTeam = teamByAbbr[game.away_abbr];
   if (!homeTeam || !awayTeam) return null;
 
-  const liveRow = backendLive[game.id] || null;
-  const final = (liveRow && (liveRow.status === 'final' || liveRow.winner || liveRow.tie)) ? liveRow : null;
-  const state = !liveRow ? 'open' : final ? 'result' : liveRow.status === 'live' ? 'live' : 'pending';
+  const final = getFinal(game.id);
+  const liveRow = getLiveResult(game.id);
+  const state = gameState(game);
   const locked = state !== 'open';
 
   const userPick = pick || null;
-  const actualWinner = final && !final.tie ? final.winner : null;
-  const grade = evaluated?.[game.id] || backendEvaluation[game.id] || null;
-  const userOutcome = grade ? grade.predictionResult : null;
-  const aiPick = grade ? grade.aiPrediction : null;
-  const aiOutcome = grade ? grade.aiResult : null;
+  const actualWinner = final && !isTie(final) ? final.winner : null;
+  // Verdicts come from the backend evaluation when reachable, and are computed
+  // from the same stored finals locally when it is not.
+  const grade = evaluated[game.id] || null;
+  const userOutcome = grade
+    ? grade.predictionResult
+    : (userPick ? predictionOutcome(game.id, userPick) : null);
+  const aiPick = (grade && grade.aiPrediction) || AI_PICKS[game.id] || null;
+  const aiOutcome = (grade && grade.aiResult)
+    || (aiPick ? predictionOutcome(game.id, aiPick) : null);
   const scoreRow = final || liveRow;
   const showScores = Boolean(scoreRow && (scoreRow.home_score != null || scoreRow.away_score != null));
 

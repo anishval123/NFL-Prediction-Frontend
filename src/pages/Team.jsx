@@ -4,8 +4,9 @@ import { usePicks } from '../context/PicksContext.jsx';
 import GameCard from '../components/GameCard.jsx';
 import TeamLogo from '../components/TeamLogo.jsx';
 import teamsData from '../data/teams.json';
+import { API_URL } from '../utils/apiBase.js';
 
-const API_BASE = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+const API_BASE = API_URL;
 const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
 
 export default function Team() {
