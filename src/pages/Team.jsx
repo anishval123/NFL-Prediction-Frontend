@@ -1,12 +1,10 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
 import { usePicks } from '../context/PicksContext.jsx';
 import GameCard from '../components/GameCard.jsx';
 import TeamLogo from '../components/TeamLogo.jsx';
 import teamsData from '../data/teams.json';
-import { API_URL } from '../utils/apiBase.js';
+import { allGames } from '../utils/records.js';
 
-const API_BASE = API_URL;
 const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
 
 export default function Team() {
@@ -14,25 +12,12 @@ export default function Team() {
   const code = abbr ? abbr.toUpperCase() : '';
   const team = TEAM_BY_ABBR[code];
   const { picks, records, setPick, clearPick } = usePicks();
-  const [schedule, setSchedule] = useState([]);
-
-  useEffect(() => {
-    async function loadSchedule() {
-      try {
-        const res = await fetch(`${API_BASE}/schedule`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setSchedule(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error('[team] schedule load error', err);
-      }
-    }
-    loadSchedule();
-  }, []);
 
   if (!team) return <Navigate to="/teams" replace />;
 
-  const games = schedule
+  // Bundled schedule, so the page always renders; results and verdicts are
+  // layered on by GameCard from the one feed the context polls.
+  const games = allGames
     .filter((g) => g.home_abbr === code || g.away_abbr === code)
     .sort((a, b) => Number(a.week) - Number(b.week));
   const rec = records[code] || { w: 0, l: 0, str: '0-0', pct: 0 };

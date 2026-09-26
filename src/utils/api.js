@@ -14,20 +14,32 @@ export function setUserId(id) {
   userId = id || null;
 }
 
-async function request(path, options = {}) {
+// Endpoints that need no identity. Calling them as "simple" requests (no custom
+// header, no credentials) stops the browser from sending a CORS preflight, which
+// halves the request count while polling and removes a whole class of failure:
+// a preflight that a proxy or a stale backend rejects would otherwise hide every
+// score on the site. Anything else stays credentialed because it is per-user.
+const PUBLIC_PATHS = [
+  '/schedule', '/teams', '/team/', '/results', '/games/finals',
+  '/games/live', '/games/status', '/standings/official',
+];
+const isPublicPath = (path) => PUBLIC_PATHS.some((p) => path.startsWith(p));
+
+async function request(path, { public: forcePublic = false, ...options } = {}) {
   try {
     // A cached response would keep a FINAL score hidden after a game ends, so
     // every call opts out of HTTP caching and carries a cache-busting stamp.
     const url = `${API_URL}${path}${path.includes('?') ? '&' : '?'}_=${Date.now()}`;
+    const anonymous = forcePublic || isPublicPath(path);
     const headers = {
       // Identifies the visitor to the per-user endpoints; the backend also
       // accepts a cookie or ?user=.
-      ...(userId ? { 'X-User-Id': userId } : {}),
+      ...(!anonymous && userId ? { 'X-User-Id': userId } : {}),
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     };
     const res = await fetch(url, {
       cache: 'no-store',
-      credentials: 'include',
+      ...(anonymous ? {} : { credentials: 'include' }),
       headers,
       ...options,
     });

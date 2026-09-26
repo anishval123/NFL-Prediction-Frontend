@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import SectionHeader from '../components/SectionHeader.jsx';
 import ModelProjection from '../components/ModelProjection.jsx';
-import { API_URL } from '../utils/apiBase.js';
+import FeedStatus from '../components/FeedStatus.jsx';
+import { gamesForWeek } from '../utils/records.js';
 
-const API_BASE = API_URL;
 const WEEK_COUNT = 18;
 
 function formatRangeDate(dateString) {
@@ -16,27 +15,13 @@ function formatRangeDate(dateString) {
 
 export default function AiInsight() {
   const { week } = useParams();
-  const [schedule, setSchedule] = useState([]);
 
-  useEffect(() => {
-    async function loadSchedule() {
-      try {
-        const res = await fetch(`${API_BASE}/schedule`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setSchedule(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error('[ai-insight] schedule load error', err);
-      }
-    }
-    loadSchedule();
-  }, []);
-
-  // If a week param is provided, render only that week. If not provided, render all weeks.
+  // If a week param is provided, render only that week. Games come from the
+  // bundled schedule so the page renders even if the API is unreachable.
   if (week) {
     const n = Number(week);
     const valid = Number.isInteger(n) && n >= 1 && n <= WEEK_COUNT;
-    const games = valid ? schedule.filter((g) => Number(g.week) === n) : [];
+    const games = valid ? gamesForWeek(n) : [];
 
     if (!valid) return <Navigate to="/ai-insight/1" replace />;
 

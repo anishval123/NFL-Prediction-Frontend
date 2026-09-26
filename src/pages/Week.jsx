@@ -1,13 +1,9 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import { usePicks } from '../context/PicksContext.jsx';
 import GameCard from '../components/GameCard.jsx';
-import ModelProjection from '../components/ModelProjection.jsx';
 import SectionHeader from '../components/SectionHeader.jsx';
 import FeedStatus from '../components/FeedStatus.jsx';
-import { API_URL } from '../utils/apiBase.js';
-
-const API_BASE = API_URL;
+import { gamesForWeek, weekCount, isFinalized, isLocked } from '../utils/records.js';
 
 export default function Week() {
   const { week } = useParams();
@@ -15,40 +11,18 @@ export default function Week() {
 
   const { picks, records, setPick, clearPick } = usePicks();
 
-  const [schedule, setSchedule] = useState([]);
-  const [liveGames, setLiveGames] = useState([]);
-  const [evaluation, setEvaluation] = useState(null);
-  const [standings, setStandings] = useState(null);
-
-  const valid = Number.isInteger(n) && n >= 1 && n <= 18;
-
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [schedRes, liveRes, evalRes, standRes] = await Promise.all([
-          fetch(`${API_BASE}/schedule/week/${n}`, { cache: 'no-store' }),
-          fetch(`${API_BASE}/games/live`, { cache: 'no-store' }),
-          fetch(`${API_BASE}/predictions/evaluation`, { cache: 'no-store' }),
-          fetch(`${API_BASE}/standings/projected`, { cache: 'no-store' })
-        ]);
-
-        setSchedule(await schedRes.json());
-        setLiveGames(await liveRes.json());
-        setEvaluation(await evalRes.json());
-        setStandings(await standRes.json());
-      } catch (err) {
-        console.error("Backend fetch error:", err);
-      }
-    }
-
-    loadData();
-  }, [n]);
+  // The games come from the bundled schedule, so the page always renders; live
+  // scores, finals and verdicts are layered on from the feed the context polls.
+  // (The previous version fetched /schedule/week/N and rendered that, which left
+  // the page empty whenever the API was unreachable.)
+  const valid = Number.isInteger(n) && n >= 1 && n <= weekCount;
+  const games = valid ? gamesForWeek(n) : [];
 
   if (!valid) return <Navigate to="/week/1" replace />;
 
-  const picked = schedule.filter((g) => picks[g.id]).length;
-  const decided = schedule.filter((g) => g.status === "final" || picks[g.id]).length;
-  const finalized = schedule.filter((g) => g.status === "final").length;
+  const picked = games.filter((g) => picks[g.id]).length;
+  const decided = games.filter((g) => isLocked(g) || picks[g.id]).length;
+  const finalized = games.filter((g) => isFinalized(g.id)).length;
 
   return (
     <div className="animate-fadeUp">
@@ -73,11 +47,11 @@ export default function Week() {
             <div className="h-2.5 w-full max-w-sm overflow-hidden rounded-full bg-slate-200 dark:bg-navy-800">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-brand-light to-brand transition-all duration-500"
-                style={{ width: `${schedule.length ? (decided / schedule.length) * 100 : 0}%` }}
+                style={{ width: `${games.length ? (decided / games.length) * 100 : 0}%` }}
               />
             </div>
             <span className="text-sm font-semibold tabular-nums text-navy-800 dark:text-slate-100">
-              {decided}<span className="text-slate-400 dark:text-slate-400"> / {schedule.length} decided</span>
+              {decided}<span className="text-slate-400 dark:text-slate-400"> / {games.length} decided</span>
             </span>
             {finalized > 0 && (
               <span className="chip bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
@@ -87,7 +61,7 @@ export default function Week() {
           </div>
 
           <div className="mt-3">
-            <FeedStatus liveGames={liveGames} />
+            <FeedStatus />
           </div>
         </div>
       </section>
@@ -120,27 +94,19 @@ export default function Week() {
           description="Tap a team on any unlocked card to lock your winner."
           right={
             <span className="chip bg-brand/10 text-brand-dark dark:text-brand-light">
-              {picked}<span className="text-slate-400 dark:text-slate-500"> / {schedule.length} picked</span>
+              {picked}<span className="text-slate-400 dark:text-slate-500"> / {games.length} picked</span>
             </span>
           }
         />
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {schedule.map((game, idx) => (
+          {games.map((game, idx) => (
             <GameCard
               key={game.id}
               game={game}
               pick={picks[game.id]}
               records={records}
-              onPick={async (gameId, abbr) => {
-                setPick(gameId, abbr);
-                await fetch(`${API_BASE}/predict`, {
-                  method: "POST",
-                  cache: 'no-store',
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ game })
-                });
-              }}
+              onPick={(gameId, abbr) => setPick(gameId, abbr)}
               onClear={() => clearPick(game.id)}
               index={idx}
             />

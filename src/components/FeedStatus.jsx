@@ -9,9 +9,14 @@ import { API_URL } from '../utils/apiBase.js';
  * given us, and what to do when it is not answering.
  */
 export default function FeedStatus({ className = '' }) {
-  const { feedConnected, feedFinals, liveUpdatedAt, liveProvider } = usePicks();
-  const finals = typeof feedFinals === 'number' ? feedFinals : 0;
+  const { feedConnected, feedFinals, liveUpdatedAt, liveProvider, finalizedCount } = usePicks();
+  // How many finals this page can actually show: the count the API reported when
+  // it was reachable, otherwise what the local feed already has.
+  const finals = typeof feedFinals === 'number' && feedFinals > 0
+    ? feedFinals
+    : (finalizedCount || 0);
   const backendLabel = API_URL.replace(/\/$/, '');
+  const isLocalBackend = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(API_URL);
 
   if (feedConnected) {
     return (
@@ -38,7 +43,9 @@ export default function FeedStatus({ className = '' }) {
         results feed offline
       </span>
       <span>
-        The public results feed is currently unavailable. The site is configured to use {backendLabel}, but the backend is not responding right now.
+        {backendLabel} is not responding, so this page is showing the {finals} final
+        {finals === 1 ? '' : 's'} it already has. Retrying automatically.
+        {isLocalBackend ? ' Start the local backend (start.bat) to load live scores.' : ''}
       </span>
     </span>
   );
