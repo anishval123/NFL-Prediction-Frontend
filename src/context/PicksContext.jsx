@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { loadLive, getResults, getEvaluation, getMe, savePredictions, setUserId } from '../utils/api.js';
+import { loadLive, getResults, getEvaluation, getMe, savePredictions, setUserId, getLastRequestError } from '../utils/api.js';
 import {
   applyLiveResults,
   countFinalized,
@@ -62,6 +62,9 @@ export function PicksProvider({ children }) {
     finals: null,
     live: null,
     attempts: 0,
+    // Why the last attempt failed (url + status or "no response"). Shown in the
+    // UI so a blocked or offline feed is not mistaken for "no games played".
+    lastError: null,
   });
 
   const picksRef = useRef(picks);
@@ -121,10 +124,15 @@ export function PicksProvider({ children }) {
           live: typeof data.live === 'number' ? data.live : null,
         };
         setLive({ loaded: true, ...view });
-        setFeed({ connected: true, attempts: 0, ...view });
+        setFeed({ connected: true, attempts: 0, lastError: null, ...view });
       } else {
         reachable.current = false;
-        setFeed((f) => ({ ...f, connected: false, attempts: (f.attempts || 0) + 1 }));
+        setFeed((f) => ({
+          ...f,
+          connected: false,
+          attempts: (f.attempts || 0) + 1,
+          lastError: getLastRequestError(),
+        }));
       }
 
       const now = Date.now();
@@ -147,7 +155,7 @@ export function PicksProvider({ children }) {
           resultsPulledAt = now;
           reachable.current = true;
           setLive((s) => ({ ...s, loaded: true }));
-          setFeed((f) => ({ ...f, connected: true, attempts: 0 }));
+          setFeed((f) => ({ ...f, connected: true, attempts: 0, lastError: null }));
         }
       }
 
@@ -325,6 +333,7 @@ export function PicksProvider({ children }) {
         feedFinals: feed.finals,
         feedLive: feed.live,
         feedAttempts: feed.attempts,
+        feedError: feed.lastError,
         dark,
         toggleTheme,
       };

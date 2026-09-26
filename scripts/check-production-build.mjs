@@ -1,20 +1,24 @@
 #!/usr/bin/env node
 /**
- * Build-time guard: what backend URL will this build actually call?
+ * Build-time guard: where will a deployed build actually send its API calls?
  *
- * Vite injects VITE_API_URL at build time, so a wrong value silently ships a
- * site that talks to localhost (which worked only on the machine running the
- * backend, and looked like "results feed offline" everywhere else). This runs
- * automatically before `npm run build` (package.json "prebuild") and fails the
- * build instead of shipping a broken site.
+ * Vite inlines env vars at build time, and the browser hides cross-origin
+ * failures from JavaScript, so a wrong API base ships silently and looks like
+ * "the backend is not responding" rather than a config error. This runs before
+ * `npm run build` (package.json "prebuild") and fails the build instead.
  *
- * This file lives INSIDE the frontend project on purpose. Vercel builds with
- * the frontend directory as the project root, so a script under ../scripts is
- * not part of the deployment and the build dies with
- * "Cannot find module '/vercel/scripts/check-production-build.mjs'".
+ * It validates the two ways a deployed build can reach the backend:
+ *   1. the same-origin proxy: /api/* must be forwarded to the deployed backend
+ *      by vercel.json, so the request is same-origin and CORS never applies
+ *   2. VITE_API_DIRECT_URL: an absolute https backend called directly, which
+ *      then depends on that backend allowing the site's origin through CORS
  *
- *   npm run build                                        # runs automatically
- *   node scripts/check-production-build.mjs              # run it on its own
+ * This file lives INSIDE the frontend project on purpose. Vercel builds with the
+ * frontend directory as the project root, so a script under ../scripts is not
+ * part of the deployment and the build dies with "Cannot find module".
+ *
+ *   npm run build                                          # runs automatically
+ *   node scripts/check-production-build.mjs                # run it on its own
  *   node scripts/check-production-build.mjs --allow-local  # for LAN builds
  */
 import fs from 'node:fs';
@@ -26,68 +30,105 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND = path.join(HERE, '..');
 const ENV_FILE = path.join(FRONTEND, '.env.production');
 const API_BASE_FILE = path.join(FRONTEND, 'src', 'utils', 'apiBase.js');
+const VERCEL_FILE = path.join(FRONTEND, 'vercel.json');
 const ALLOW_LOCAL = process.argv.includes('--allow-local');
 
-/**
- * The fallback the app itself uses, read from source so this guard can never
- * drift away from what the bundle actually does.
- */
-function readAppFallback() {
-  try {
-    const source = fs.readFileSync(API_BASE_FILE, 'utf8');
-    const match = source.match(/PRODUCTION_API_URL\s*=\s*'([^']+)'/);
+/** Read the constants the app itself uses, so this guard cannot drift from it. */
+function readApiBaseConstants() {
+  const source = fs.existsSync(API_BASE_FILE) ? fs.readFileSync(API_BASE_FILE, 'utf8') : '';
+  const pick = (name) => {
+    const match = source.match(new RegExp(`${name}\\s*=\\s*'([^']+)'`));
     return match ? match[1].trim().replace(/\/+$/, '') : null;
-  } catch {
-    return null;
-  }
+  };
+  return { proxy: pick('PROXY_PATH'), deployed: pick('PRODUCTION_API_URL') };
 }
 
-/** The value Vite will inline: process env first, then .env.production. */
-function readBuildEnvUrl() {
-  if (process.env.VITE_API_URL) {
-    return { url: process.env.VITE_API_URL, source: 'process.env.VITE_API_URL' };
+/** Values from frontend/.env.production, if it exists. */
+function readEnvFile() {
+  const vars = {};
+  if (!fs.existsSync(ENV_FILE)) return vars;
+  for (const line of fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/);
+    if (match) vars[match[1]] = match[2];
   }
-  if (fs.existsSync(ENV_FILE)) {
-    for (const line of fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/)) {
-      const match = line.match(/^\s*VITE_API_URL\s*=\s*(.+?)\s*$/);
-      if (match) return { url: match[1], source: path.relative(FRONTEND, ENV_FILE) };
-    }
-  }
-  return { url: '', source: 'not set, using the fallback in src/utils/apiBase.js' };
+  return vars;
 }
 
-const { url, source } = readBuildEnvUrl();
-const cleaned = url ? url.trim().replace(/\/+$/, '') : '';
-const appFallback = readAppFallback();
-const FALLBACK = appFallback || 'https://nfl-prediction-backend.onrender.com';
-const resolved = cleaned || FALLBACK;
+const { proxy, deployed } = readApiBaseConstants();
+const envVars = readEnvFile();
+const directOverride = (process.env.VITE_API_DIRECT_URL || envVars.VITE_API_DIRECT_URL || '')
+  .trim().replace(/\/+$/, '');
+const devOverride = (process.env.VITE_API_URL || envVars.VITE_API_URL || '').trim();
 
 const problems = [];
-if (resolved.startsWith('/')) {
-  problems.push('it is a relative path, so it would hit the frontend domain itself');
+const notes = [];
+
+if (!proxy) problems.push('src/utils/apiBase.js does not define PROXY_PATH, so a deployed build has no API base');
+if (!deployed) problems.push('src/utils/apiBase.js does not define PRODUCTION_API_URL');
+if (deployed && !/^https:\/\//i.test(deployed)) {
+  problems.push('PRODUCTION_API_URL is not an https URL, which a deployed HTTPS page would refuse as mixed content');
 }
-if (!/^https?:\/\//i.test(resolved)) problems.push('it is not an absolute URL');
-if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(resolved) && !ALLOW_LOCAL) {
-  problems.push('it points at localhost, which no visitor but you can reach');
-}
-if (/^http:\/\//i.test(resolved) && !ALLOW_LOCAL) {
-  problems.push('it is plain http; a deployed HTTPS page would block it as mixed content');
-}
-if (appFallback && FALLBACK === appFallback && /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(appFallback) && !ALLOW_LOCAL) {
-  problems.push('the app fallback in src/utils/apiBase.js points at localhost');
+if (deployed && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(deployed) && !ALLOW_LOCAL) {
+  problems.push('PRODUCTION_API_URL points at localhost, which no visitor but you can reach');
 }
 
-console.log(`[build-check] API base for visitors : ${resolved}`);
-console.log(`[build-check] source                : ${source}`);
-console.log(`[build-check] app fallback          : ${appFallback || '(could not read src/utils/apiBase.js)'}`);
+/** The proxy only helps if vercel.json actually forwards it. */
+function proxyWiring() {
+  if (!fs.existsSync(VERCEL_FILE)) return { ok: false, detail: 'vercel.json is missing' };
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(VERCEL_FILE, 'utf8'));
+  } catch (err) {
+    return { ok: false, detail: `vercel.json is not valid JSON (${err.message})` };
+  }
+  const rewrites = Array.isArray(config.rewrites) ? config.rewrites : [];
+  const rule = rewrites.find((r) => typeof r.source === 'string' && proxy && r.source.startsWith(proxy));
+  if (!rule) return { ok: false, detail: `no rewrite forwards ${proxy}/*` };
+  const destination = String(rule.destination || '');
+  if (deployed && destination.startsWith(deployed)) {
+    return { ok: true, detail: `${rule.source} -> ${destination}` };
+  }
+  return { ok: false, detail: `the ${rule.source} rewrite points at ${destination || 'nothing'}` };
+}
+
+let servedBy;
+let proxyDetail = '';
+if (directOverride) {
+  servedBy = directOverride;
+  if (!/^https?:\/\//i.test(directOverride)) {
+    problems.push('VITE_API_DIRECT_URL is not an absolute URL');
+  }
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(directOverride) && !ALLOW_LOCAL) {
+    problems.push('VITE_API_DIRECT_URL points at localhost, which no visitor but you can reach');
+  }
+  if (/^http:\/\//i.test(directOverride) && !ALLOW_LOCAL) {
+    problems.push('VITE_API_DIRECT_URL is plain http, which a deployed HTTPS page would block as mixed content');
+  }
+  notes.push('VITE_API_DIRECT_URL bypasses the same-origin proxy, so this build depends on the backend allowing the site origin through CORS');
+} else {
+  servedBy = proxy || '/api';
+  const wiring = proxyWiring();
+  proxyDetail = wiring.detail;
+  if (!wiring.ok) {
+    problems.push(`a deployed build would request ${servedBy}/... from the frontend domain, but vercel.json does not forward it to the backend (${wiring.detail})`);
+  }
+}
+
+console.log(`[build-check] deployed API base : ${servedBy}${directOverride ? ' (direct)' : ' (same-origin proxy)'}`);
+if (!directOverride) console.log(`[build-check] proxy wiring      : ${proxyDetail}`);
+console.log(`[build-check] backend           : ${deployed || '(not defined)'}`);
+console.log(`[build-check] fallback          : ${directOverride ? '(disabled: this build is already direct)' : `${deployed} (tried only if the proxy fails)`}`);
+if (devOverride) {
+  console.log(`[build-check] dev override      : ${devOverride} (development builds only, never used in production)`);
+}
 
 if (problems.length) {
-  console.error('\n[build-check] BUILD STOPPED, the production frontend would not be able to load results:');
+  console.error('\n[build-check] BUILD STOPPED, a deployed build would not be able to load results:');
   for (const p of problems) console.error(`  - ${p}`);
-  console.error('\nFix VITE_API_URL in Vercel (Settings -> Environment Variables) or in');
-  console.error('frontend/.env.production, then redeploy. Use --allow-local only if you');
-  console.error('really are building for a LAN address.\n');
+  console.error('\nFix src/utils/apiBase.js or vercel.json, then rebuild. Use --allow-local only');
+  console.error('if you really are building for a LAN address.\n');
   process.exit(1);
 }
 
-console.log('[build-check] ok, every visitor will call the deployed backend\n');
+for (const note of notes) console.log(`[build-check] note              : ${note}`);
+console.log('[build-check] ok, every visitor reaches the deployed backend\n');
