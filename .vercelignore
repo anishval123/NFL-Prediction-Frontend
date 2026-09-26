@@ -1,0 +1,33 @@
+# Vercel upload exclusions.
+#
+# node_modules MUST NOT be uploaded. A node_modules installed on Windows carries
+# no POSIX execute bit, so on Vercel's Linux builder the shim
+# node_modules/.bin/vite is not executable and the build dies with:
+#
+#   sh: line 1: /vercel/path0/node_modules/.bin/vite: Permission denied
+#   Error: Command "npm run build" exited with 126
+#
+# Letting Vercel install dependencies itself (see installCommand in vercel.json)
+# gives every binary the right permissions and the right Linux platform packages.
+node_modules
+frontend/node_modules
+
+# Build output is generated on the builder, never uploaded.
+dist
+frontend/dist
+
+# Local logs and scratch files
+*.log
+_*.log
+__records_test_bundle.mjs
+
+# Local env overrides. NOTE: .env.production is deliberately NOT excluded, the
+# build guard and Vite both read it for VITE_API_URL.
+.env.local
+.env.*.local
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode
+.idea

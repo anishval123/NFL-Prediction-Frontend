@@ -1,0 +1,21 @@
+# Keep dependencies and build output out of the repository as well as the
+# deployment. A node_modules committed from Windows has no POSIX execute bits,
+# which makes `node_modules/.bin/vite` unrunnable on Vercel's Linux builder
+# (exit 126). The repository root .gitignore covers `node_modules/` too; this
+# file keeps the frontend self-contained, which matters because Vercel uses this
+# directory as the project root.
+node_modules/
+
+# build output
+dist/
+*.log
+_*.log
+__records_test_bundle.mjs
+
+# local env overrides (never ignore .env.production: Vite reads VITE_API_URL from it)
+.env.local
+.env.*.local
+
+# editor / os
+.DS_Store
+Thumbs.db
