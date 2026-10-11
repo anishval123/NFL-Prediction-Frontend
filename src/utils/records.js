@@ -208,6 +208,36 @@ export function predictionOutcome(gameId, pick) {
 }
 
 /**
+ * How the AI's own recorded prediction fared — never the user's pick, and
+ * always the call that was on record before the game, never one regenerated
+ * afterwards (`originalWinner` comes from the model snapshot).
+ *
+ * `serverRow` is this game's row from the backend evaluation when reachable.
+ * That verdict is computed server-side from the stored finals, so every device
+ * sees the same answer and it updates whether or not any browser is open. When
+ * the backend is unreachable the same stored finals the site already merged
+ * from the results feed are used instead.
+ *
+ * Returns 'correct' | 'incorrect', or null while the game is scheduled or in
+ * progress — those must never show a label.
+ */
+export function aiPredictionOutcome(gameId, originalWinner, serverRow) {
+  const serverFinal = Boolean(serverRow && serverRow.status === 'final');
+  if (serverFinal) {
+    if (serverRow.aiResult === 'correct' || serverRow.aiResult === 'incorrect') {
+      return serverRow.aiResult;
+    }
+    if (!originalWinner) return null;
+    if (serverRow.tie || !serverRow.winner) return 'incorrect'; // a tie can never match
+    return serverRow.winner === originalWinner ? 'correct' : 'incorrect';
+  }
+  const result = getFinal(gameId);
+  if (!result || !originalWinner) return null;
+  if (isTie(result) || !result.winner) return 'incorrect';
+  return result.winner === originalWinner ? 'correct' : 'incorrect';
+}
+
+/**
  * The user's prediction record, counted over finalized games only — upcoming
  * and in-progress games never move it. Ties are tracked but not graded.
  */

@@ -174,7 +174,6 @@ export default function About() {
 
         <div className="mt-8 flex flex-wrap gap-2">
           <Link to="/week/1" className="btn-primary">Start picking</Link>
-          <Link to="/standings" className="btn-outline">Watch it move</Link>
         </div>
       </section>
     </div>

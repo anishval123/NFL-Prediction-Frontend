@@ -10,11 +10,22 @@ const STATS = [
   { value: '272', label: 'Games', desc: 'every 2027 matchup' },
   { value: '18', label: 'Weeks', desc: 'full regular season' },
   { value: '32', label: 'Teams', desc: 'AFC + NFC' },
-  { value: '1', label: 'Crown', desc: 'supreme picker' },
 ];
 
 export default function Home() {
-  const { totalPicked, records, decidedCount, resetAll, projectedRecords } = usePicks();
+  const {
+    totalPicked,
+    records,
+    decidedCount,
+    resetAll,
+    projectedRecords,
+    predictionRecord,
+    aiRecord,
+  } = usePicks();
+  // Same figures the AI Insight tab reports — read straight from the shared
+  // context so the hero can never drift from those numbers or recompute them.
+  const userRecord = predictionRecord || { str: '0-0', pct: 0, graded: 0 };
+  const modelRecord = aiRecord && aiRecord.graded > 0 ? aiRecord : null;
   const leaderboard = Object.entries(projectedRecords || records || {})
     .map(([abbr, rec]) => ({
       abbr,
@@ -43,50 +54,94 @@ export default function Home() {
         <div className="pointer-events-none absolute -right-20 bottom-0 h-80 w-80 rounded-full bg-navy-500/20 blur-3xl" />
 
         <div className="container-page relative py-14 sm:py-20">
-          <div className="max-w-3xl">
-            <span className="chip bg-brand/15 text-brand-light">2026 season · Official NFL schedule</span>
-            <h1 className="mt-4 text-5xl font-black uppercase leading-[0.95] tracking-tight text-white sm:text-7xl">
-              Predict every game.
-              <br />
-              Own the <span className="text-brand-light">season.</span>
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
-              Tap a team, lock in your winner, and watch standings rebuild
-              instantly. All 18 weeks, all 272 games, all 32 teams.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Link to="/week/1" className="btn-primary">
-                Make Week 1 picks
-                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 10h12m0 0-5-5m5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </Link>
-              <Link to="/standings" className="btn-ghost-light">Your standings</Link>
-              {totalPicked > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm('Reset all picks? This will clear your selections and revert team records to current standings.')) {
-                      resetAll();
-                    }
-                  }}
-                  className="btn-outline"
-                >
-                  Reset all picks
-                </button>
-              )}
-              {totalPicked > 0 && (
-                <span className="chip border border-white/15 bg-white/5 text-slate-200">
-                  {totalPicked} picks · {pct}% decided
-                </span>
-              )}
+          <div className="flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-14 xl:gap-20">
+            <div className="max-w-3xl lg:min-w-0 lg:flex-1">
+              <span className="chip bg-brand/15 text-brand-light">2026 season · Official NFL schedule</span>
+              <h1 className="mt-4 text-5xl font-black uppercase leading-[0.95] tracking-tight text-white sm:text-7xl">
+                Predict every game.
+                <br />
+                Defeat <span className="text-brand-light">AI</span>
+              </h1>
+              <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
+                Tap a team, lock in your winner, and come back to see if you
+                outpicked AI.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link to="/ai-insight/1#ai-insight" className="btn-primary">
+                  AI Predictions
+                  <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 10h12m0 0-5-5m5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Link>
+                <Link to="/standings" className="btn-ghost-light">Your standings</Link>
+                {totalPicked > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Reset all picks? This will clear your selections and revert team records to current standings.')) {
+                        resetAll();
+                      }
+                    }}
+                    className="btn-outline"
+                  >
+                    Reset all picks
+                  </button>
+                )}
+                {totalPicked > 0 && (
+                  <span className="chip border border-white/15 bg-white/5 text-slate-200">
+                    {totalPicked} picks · {pct}% decided
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Season records, set straight on the hero background — no panel of
+                their own. Same live figures the AI Insight tab reports. */}
+            <aside aria-label="Season records" className="lg:shrink-0">
+              <dl className="flex flex-col gap-8 lg:gap-10">
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                    Your Prediction Record
+                  </dt>
+                  <dd className="mt-2 flex items-baseline gap-3">
+                    <span className="font-display text-5xl font-black text-white tabular-nums sm:text-6xl">
+                      {userRecord.str}
+                    </span>
+                    {userRecord.graded > 0 && (
+                      <span className="text-sm font-semibold text-slate-400">
+                        {Math.round((userRecord.pct || 0) * 100)}%
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                    AI Season Record
+                  </dt>
+                  <dd className="mt-2 flex items-baseline gap-3">
+                    <span className="font-display text-5xl font-black text-brand-light tabular-nums sm:text-6xl">
+                      {modelRecord ? modelRecord.str : '—'}
+                    </span>
+                    {modelRecord && (
+                      <span className="text-sm font-semibold text-slate-400">
+                        {Math.round((modelRecord.pct || 0) * 100)}%
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </aside>
           </div>
 
-          <dl className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {STATS.map((s) => (
-              <div key={s.label} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-                <dd className="font-display text-3xl font-bold text-white">{s.value}</dd>
+          <dl className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {STATS.map((s, i) => (
+              <div
+                key={s.label}
+                className={`rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm${
+                  i === STATS.length - 1 ? ' col-span-2 sm:col-span-1' : ''
+                }`}
+              >
+                <dd className="font-display text-4xl font-bold text-white">{s.value}</dd>
                 <dt className="mt-1 text-xs font-bold uppercase tracking-widest text-slate-400">{s.label}</dt>
                 <p className="text-[11px] text-slate-500">{s.desc}</p>
               </div>

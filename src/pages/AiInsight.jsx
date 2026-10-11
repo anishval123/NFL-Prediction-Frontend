@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import SectionHeader from '../components/SectionHeader.jsx';
 import ModelProjection from '../components/ModelProjection.jsx';
@@ -15,6 +16,16 @@ function formatRangeDate(dateString) {
 
 export default function AiInsight() {
   const { week } = useParams();
+
+  // The hero's "AI Predictions" button links straight to this section header
+  // (/ai-insight/1#ai-insight). React Router navigation does not trigger the
+  // browser's native fragment scroll, so honour the hash here.
+  useEffect(() => {
+    const id = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [week]);
 
   // If a week param is provided, render only that week. Games come from the
   // bundled schedule so the page renders even if the API is unreachable.

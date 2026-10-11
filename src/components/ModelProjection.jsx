@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { usePicks } from '../context/PicksContext.jsx';
 import teamsData from '../data/teams.json';
 import snapshot from '../data/projections2026.json';
+import { getFinal, aiPredictionOutcome } from '../utils/records.js';
 
 const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
 
@@ -11,6 +13,24 @@ const AI_BY_PAIR = (() => {
     (rows || []).forEach((row) => {
       if (row && row.game_id && row.team_1 && row.team_2) {
         map[`${row.team_1}-${row.team_2}`] = row.game_id;
+      }
+    });
+  });
+  return map;
+})();
+
+/**
+ * The AI's originally recorded winner per game id, straight from the same
+ * bundled snapshot the backend grades. Grading always reads this map, so a
+ * prediction regenerated after kickoff (by the live service or a retrained
+ * snapshot) can never rewrite the call that was actually on record.
+ */
+const AI_WINNER_BY_ID = (() => {
+  const map = {};
+  Object.values(snapshot.weeks || {}).forEach((rows) => {
+    (rows || []).forEach((row) => {
+      if (row && row.game_id && row.predicted_winner) {
+        map[row.game_id] = row.predicted_winner;
       }
     });
   });
@@ -66,6 +86,16 @@ function snapshotDate(iso) {
   return Number.isNaN(d.getTime())
     ? 'bundled'
     : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** Schedule game + stored result -> "SEA 24 - NE 17" (winner first), or null. */
+function scoreLine(game, result) {
+  const hs = result ? result.home_score : null;
+  const aws = result ? result.away_score : null;
+  if (!game || hs == null || aws == null) return null;
+  return hs >= aws
+    ? `${game.home_abbr} ${hs} - ${game.away_abbr} ${aws}`
+    : `${game.away_abbr} ${aws} - ${game.home_abbr} ${hs}`;
 }
 
 function ProjectionRow({ pred, grade, expanded, onToggle }) {
@@ -187,6 +217,11 @@ export default function ModelProjection({ week, games }) {
   const [liveTried, setLiveTried] = useState(false);
   const [openIndex, setOpenIndex] = useState(null);
 
+  // Server-side verdicts + the AI's season grade, refreshed by the same poll
+  // loop that pulls the results feed, so a finalised game grades itself on
+  // every device without this tab being open or manually refreshed.
+  const { evaluated, aiRecord, liveUpdatedAt } = usePicks();
+
   const gameKey = games.map((g) => g.id).join(',');
 
   // Bundled snapshot for this week, returned in schedule order.
@@ -259,30 +294,35 @@ export default function ModelProjection({ week, games }) {
 
   // Grade the model's own pick against the stored final, without ever altering
   // the prediction itself: the AI's call and the actual result stay separate.
+  //
+  // aiPredictionOutcome always compares the AI's originally recorded winner
+  // (AI_WINNER_BY_ID) — never the user's pick and never a prediction regenerated
+  // after the game — and takes the verdict from the backend evaluation when the
+  // API answers, so it is identical on every device and updates whether or not
+  // this tab is open. Scheduled and in-progress games return null: no label.
   const grades = useMemo(() => {
     const map = {};
     rows.forEach((pred) => {
       const gameId = pred.game_id || AI_BY_PAIR[`${pred.team_1}-${pred.team_2}`];
       if (!gameId) return;
-      const finalGame = games.find((game) => game.id === gameId || game.game_id === gameId);
-      if (!finalGame) return;
-      const hs = finalGame.home_score ?? finalGame.homeScore;
-      const aws = finalGame.away_score ?? finalGame.awayScore;
-      let score = null;
-      if (hs != null && aws != null) {
-        const winner = hs === aws ? 'tie' : hs > aws ? finalGame.home_abbr : finalGame.away_abbr;
-        score = hs >= aws
-          ? `${finalGame.home_abbr} ${hs} - ${finalGame.away_abbr} ${aws}`
-          : `${finalGame.away_abbr} ${aws} - ${finalGame.home_abbr} ${hs}`;
-        map[`${pred.team_1}-${pred.team_2}`] = {
-          outcome: pred.predicted_winner === winner || (winner === 'tie' ? pred.predicted_winner === null : false) ? 'correct' : 'incorrect',
-          score,
-          winner: winner === 'tie' ? null : winner,
-        };
-      }
+
+      const row = evaluated[gameId];
+      const result = getFinal(gameId);
+      const serverFinal = Boolean(row && row.status === 'final');
+      const outcome = aiPredictionOutcome(gameId, AI_WINNER_BY_ID[gameId] || null, row);
+      if (!outcome) return; // upcoming or in progress: show neither label
+
+      const game = games.find((g) => g.id === gameId);
+      const winner = (serverFinal
+        ? (row.winner || row.actualWinner)
+        : (result && result.winner)) || null;
+      let score = serverFinal ? (row.final_score || row.finalScore) : null;
+      if (!score && game && result) score = scoreLine(game, result);
+
+      map[`${pred.team_1}-${pred.team_2}`] = { outcome, score, winner };
     });
     return map;
-  }, [rows, games]);
+  }, [rows, games, evaluated, liveUpdatedAt]);
 
   // Nothing stored for this week and the service has not answered yet.
   if (!rows.length && !liveTried) {
@@ -357,6 +397,15 @@ export default function ModelProjection({ week, games }) {
           <span>
             Held out season {info.test_season}: {Math.round(test.accuracy * 100)}% straight up, AUC{' '}
             {test.roc_auc} over {test.n} team games
+          </span>
+        )}
+        {aiRecord && aiRecord.graded > 0 && (
+          <span>
+            Season grade{' '}
+            <span className="font-bold text-slate-700 dark:text-slate-200">
+              {aiRecord.str} ({Math.round((aiRecord.pct || 0) * 100)}%)
+            </span>{' '}
+            of decided games
           </span>
         )}
         <span>
