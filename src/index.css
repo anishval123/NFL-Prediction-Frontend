@@ -51,6 +51,19 @@
   .fire-dot {
     @apply inline-block h-1.5 w-1.5 rounded-full bg-brand;
   }
+  /* One visible container per matchup, shared by every game list: the pick
+     cards (GameCard) and the AI projection rows (ModelProjection). */
+  .matchup {
+    @apply relative rounded-2xl border-2 border-slate-300 bg-white shadow-card transition-all duration-200 hover:border-slate-400 hover:shadow-lift dark:border-navy-600 dark:bg-navy-900 dark:hover:border-navy-500;
+  }
+  /* A matchup the user picked (or expanded) gets a stronger brand left accent. */
+  .matchup-picked {
+    @apply border-l-4 border-l-brand shadow-lift;
+  }
+  /* Keep the red accent on hover too (.matchup:hover would otherwise win). */
+  .matchup-picked:hover {
+    @apply border-l-brand;
+  }
 }
 
 /* Slim modern scrollbars */

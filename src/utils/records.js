@@ -218,28 +218,36 @@ export function predictionOutcome(gameId, pick) {
  * the backend is unreachable the same stored finals the site already merged
  * from the results feed are used instead.
  *
- * Returns 'correct' | 'incorrect', or null while the game is scheduled or in
- * progress — those must never show a label.
+ * Returns 'correct' | 'incorrect' | 'tie', or null while the game is scheduled
+ * or in progress — those must never show a label. A tie (isTie: the stored
+ * flag or equal final scores) is excluded from the record entirely: it is
+ * neither correct nor incorrect.
  */
 export function aiPredictionOutcome(gameId, originalWinner, serverRow) {
   const serverFinal = Boolean(serverRow && serverRow.status === 'final');
   if (serverFinal) {
-    if (serverRow.aiResult === 'correct' || serverRow.aiResult === 'incorrect') {
-      return serverRow.aiResult;
+    const verdict = serverRow.aiResult;
+    if (verdict === 'correct' || verdict === 'incorrect' || verdict === 'tie') {
+      return verdict;
     }
     if (!originalWinner) return null;
-    if (serverRow.tie || !serverRow.winner) return 'incorrect'; // a tie can never match
+    // A final with no winner (a tie, or a level scoreline) can never be graded
+    // against the model's call — excluded, not incorrect.
+    if (serverRow.tie || !serverRow.winner) return 'tie';
     return serverRow.winner === originalWinner ? 'correct' : 'incorrect';
   }
   const result = getFinal(gameId);
-  if (!result || !originalWinner) return null;
-  if (isTie(result) || !result.winner) return 'incorrect';
+  if (!result) return null;
+  if (isTie(result)) return 'tie';
+  if (!originalWinner || !result.winner) return null;
   return result.winner === originalWinner ? 'correct' : 'incorrect';
 }
 
 /**
- * The user's prediction record, counted over finalized games only — upcoming
- * and in-progress games never move it. Ties are tracked but not graded.
+ * The user's prediction record, counted over decided games only — upcoming
+ * and in-progress games never move it. A tie (isTie) is excluded entirely: it
+ * is not correct, not incorrect, and not a game played, so the string stays
+ * W-L and accuracy is correct / decided (guarded when nothing is decided).
  */
 export function computePredictionRecord(picks = {}) {
   let correct = 0;
@@ -252,7 +260,7 @@ export function computePredictionRecord(picks = {}) {
     const outcome = predictionOutcome(game.id, pick);
     if (outcome === 'correct') correct += 1;
     else if (outcome === 'incorrect') incorrect += 1;
-    else if (outcome === 'tie') tied += 1;
+    else if (outcome === 'tie') tied += 1; // tracked, excluded from the record
     else pending += 1;
   });
   const graded = correct + incorrect;
@@ -263,7 +271,7 @@ export function computePredictionRecord(picks = {}) {
     pending,
     graded,
     pct: graded > 0 ? correct / graded : 0,
-    str: tied > 0 ? `${correct}-${incorrect}-${tied}` : `${correct}-${incorrect}`,
+    str: `${correct}-${incorrect}`,
   };
 }
 

@@ -121,6 +121,7 @@ export default function About() {
               <li>Only ever sees stats through the week before, so nothing from the current week can leak in.</li>
               <li>Never reads your picks, and its winners are never added to your record or the standings.</li>
               <li>Once a game is final the model&apos;s own pick is graded against the real result (✓ / ✗) and is never replaced by it.</li>
+              <li>Ties do not impact the overall AI record.</li>
               <li>If a live service is unreachable the bundled snapshot still shows, so the section is never blank.</li>
             </ul>
             <div className="flex flex-wrap gap-1.5 pt-1">

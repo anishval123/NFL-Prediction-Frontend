@@ -35,7 +35,7 @@ export function setUserId(id) {
 // score on the site. Anything else stays credentialed because it is per-user.
 const PUBLIC_PATHS = [
   '/schedule', '/teams', '/team/', '/results', '/games/finals',
-  '/games/live', '/games/status', '/standings/official',
+  '/games/live', '/games/status', '/standings/official', '/ai-projections',
 ];
 const isPublicPath = (path) => PUBLIC_PATHS.some((p) => path.startsWith(p));
 
@@ -105,6 +105,8 @@ export const api = {
   getFinals: () => request('/games/finals'),
   /** Live game status + final results, refreshed by the backend poller. */
   loadLive: () => request('/games/live'),
+  /** Published model rows; Render is the source of truth for AI Insight. */
+  getAiProjections: (week) => request(`/ai-projections${week ? `?week=${encodeURIComponent(week)}` : ''}`),
   /** This user's identity plus the predictions the server has stored for them. */
   getMe: () => request('/users/me'),
   /** Replace this user's predictions (server-side, per user). */
@@ -129,6 +131,7 @@ export const api = {
 
 /** Convenience named exports used by the poller in context. */
 export const loadLive = () => api.loadLive();
+export const getAiProjections = (week) => api.getAiProjections(week);
 export const getResults = () => api.getResults();
 export const getFinals = () => api.getFinals();
 export const getEvaluation = () => api.getEvaluation();

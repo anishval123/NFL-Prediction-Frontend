@@ -14,6 +14,35 @@ function formatRangeDate(dateString) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/**
+ * Plain-language explainer for the Elo rating the projections are built on.
+ * Sits at the top of the AI Insight tab, where a reader meets the term for the
+ * first time ("Elo rating (pregame)" in the breakdown table).
+ */
+function EloNote() {
+  return (
+    <aside className="mt-5 rounded-xl border border-violet-500/25 bg-violet-500/5 p-4 text-sm leading-relaxed text-slate-600 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-slate-300">
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-violet-700 dark:text-violet-300">
+        What is an Elo rating?
+      </p>
+      <p>
+        Every team has a rating (starting at{' '}
+        <b className="font-semibold text-navy-800 dark:text-slate-100">1500</b>) that
+        summarizes its strength based on completed games. After each game, ratings
+        adjust based on how the result compares to expectations, with bigger changes
+        for unexpected outcomes. To predict a matchup, the model compares team
+        ratings, adds{' '}
+        <b className="font-semibold text-navy-800 dark:text-slate-100">
+          55 points to the home team
+        </b>
+        , and converts the adjusted rating difference into a win probability. Only
+        games completed before the selected week are used. Elo summarizes past
+        results rather than explaining what causes a team to win.
+      </p>
+    </aside>
+  );
+}
+
 export default function AiInsight() {
   const { week } = useParams();
 
@@ -116,11 +145,16 @@ export default function AiInsight() {
             }
           />
 
+          <EloNote />
+
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="col-span-1 md:col-span-2 xl:col-span-3">
               <ModelProjection week={n} games={games} />
             </div>
           </div>
+          <p className="mt-3 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            Ties do not impact the overall AI record.
+          </p>
         </section>
       </div>
     );
@@ -140,6 +174,8 @@ export default function AiInsight() {
           </span>
         }
       />
+
+      <EloNote />
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {Array.from({ length: WEEK_COUNT }, (_, i) => i + 1).map((wk) => (

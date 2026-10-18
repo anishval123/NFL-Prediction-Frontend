@@ -38,7 +38,7 @@ function formatDate(date) {
 const OUTCOMES = {
   correct: { label: '✓ Correct', className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' },
   incorrect: { label: '✗ Incorrect', className: 'bg-rose-500/15 text-rose-600 dark:text-rose-400' },
-  tie: { label: '= Tie (no pick wins)', className: 'bg-slate-200 text-slate-600 dark:bg-navy-700 dark:text-slate-300' },
+  tie: { label: 'Tie', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
 };
 
 /** A tick or a cross, and nothing at all when nothing was predicted. */
@@ -158,7 +158,7 @@ export default function GameCard({ game, pick, records, onPick, onClear, index =
 
   return (
     <article
-      className="card animate-pop overflow-hidden"
+      className={`matchup animate-pop overflow-hidden${userPick ? ' matchup-picked' : ''}`}
       style={{ animationDelay: `${Math.min(index * 45, 400)}ms` }}
     >
       {/* meta bar */}
@@ -224,13 +224,13 @@ export default function GameCard({ game, pick, records, onPick, onClear, index =
         />
 
         <div className="flex items-center gap-2 px-2">
-          <span className="h-px flex-1 bg-slate-200 dark:bg-navy-700" />
+          <span className="h-px flex-1 bg-slate-300 dark:bg-navy-600" />
           {locked ? (
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">ended</span>
           ) : (
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 dark:text-slate-500">vs</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">vs</span>
           )}
-          <span className="h-px flex-1 bg-slate-200 dark:bg-navy-700" />
+          <span className="h-px flex-1 bg-slate-300 dark:bg-navy-600" />
         </div>
 
         <TeamRow

@@ -3,6 +3,7 @@ import { usePicks } from '../context/PicksContext.jsx';
 import teamsData from '../data/teams.json';
 import snapshot from '../data/projections2026.json';
 import { getFinal, aiPredictionOutcome } from '../utils/records.js';
+import { getAiProjections } from '../utils/api.js';
 
 const TEAM_BY_ABBR = Object.fromEntries((teamsData || []).map((team) => [team.abbr, team]));
 
@@ -37,30 +38,9 @@ const AI_WINNER_BY_ID = (() => {
   return map;
 })();
 
-/**
- * ML service base URLs.
- *
- * Set VITE_ML_URL when the model service is deployed somewhere reachable. The
- * localhost entries are development-only on purpose: on a deployed HTTPS site a
- * call to `http://localhost:8001` would target the visitor's own machine and be
- * blocked as mixed content anyway. With no ML service configured, the AI Insight
- * section renders from the model's bundled snapshot instead.
- */
-const ML_ENDPOINTS = (() => {
-  const configured = (typeof import.meta !== 'undefined' && import.meta.env
-    && import.meta.env.VITE_ML_URL) || '';
-  const list = configured ? [configured.trim().replace(/\/+$/, '')] : [];
-  const host = (typeof window !== 'undefined' && window.location)
-    ? window.location.hostname
-    : '';
-  if (!host || host === 'localhost' || host === '127.0.0.1') {
-    list.push('http://localhost:8001', 'http://127.0.0.1:8001');
-  }
-  return list;
-})();
-
 /** Explanation fields shown when a row is expanded, with display labels. */
 const FACETS = [
+  ['elo_rating', 'Elo rating (pregame)'],
   ['off_epa_per_play', 'Off EPA/play'],
   ['def_epa_per_play', 'Def EPA/play'],
   ['points_for', 'Points scored'],
@@ -71,8 +51,78 @@ const FACETS = [
   ['redzone_pct', 'Red zone'],
 ];
 
+const DETAIL_METRICS = [
+  ['off_epa_per_play', 'Off EPA/play'], ['def_epa_per_play', 'Def EPA allowed/play'],
+  ['off_success_rate', 'Offensive success rate'], ['def_success_rate', 'Defensive success rate allowed'],
+  ['pass_epa_per_dropback', 'Pass EPA/dropback'], ['rush_epa_per_attempt', 'Rush EPA/attempt'],
+  ['turnover_plus', 'Turnover margin/play'], ['pressure_rate', 'Pressure rate'],
+  ['sack_rate', 'Sack rate allowed'], ['third_down_pct', 'Third down'],
+  ['redzone_pct', 'Red zone TD rate'], ['points_for', 'Points/game'], ['points_against', 'Points allowed/game'],
+];
+
+function unavailable(value) {
+  return value === null || value === undefined || Number.isNaN(value);
+}
+
+/**
+ * Which model produced the contributions on this row, described truthfully
+ * from the backend's `contribution_basis` field. Older snapshots without the
+ * field fall back to the logistic description only when the row really came
+ * from a linear model version; everything else reports contributions as
+ * unavailable rather than mislabelling them.
+ */
+function contributionMethod(pred) {
+  const basis = pred.contribution_basis
+    || ((pred.model_version || '').startsWith('lr-') ? 'logistic_coefficients' : 'unavailable');
+  if (basis === 'elo_log_odds') {
+    return 'Values decompose this Elo model\u2019s own log-odds: pregame rating gap and the +55 home edge, each as its actual share of the probability shown.';
+  }
+  if (basis === 'logistic_coefficients') {
+    return 'Values are actual standardized logistic feature \u00d7 coefficient contributions.';
+  }
+  return 'The selected model exposes no feature-level contributions, so none are shown.';
+}
+
+function detailValue(value, label) {
+  if (unavailable(value)) return 'Unavailable';
+  if (/rate|Third|Red zone|Sack/.test(label)) return `${(value * 100).toFixed(1)}%`;
+  return Number(value).toFixed(/Points/.test(label) ? 1 : 3);
+}
+
+function FocusDashboard({ pred, game, model, dataQuality }) {
+  if (!pred) return null;
+  const one = pred.explanation?.team_1 || {};
+  const two = pred.explanation?.team_2 || {};
+  const first = TEAM_BY_ABBR[pred.team_1];
+  const second = TEAM_BY_ABBR[pred.team_2];
+  const contributions = pred.feature_contributions || [];
+  const p1 = Math.round(pred.team_1_win_probability * 100);
+  const p2 = 100 - p1;
+  return <div className="space-y-4 border-t border-slate-100 p-4 dark:border-navy-800">
+    <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700">
+      <div className="grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
+        <div className="flex items-center gap-2">{first?.logo && <img src={first.logo} alt="" className="h-9 w-9" />}<b>{first?.name || pred.team_1}</b></div>
+        <div className="text-center"><p className="text-xs text-slate-500">{game?.date || `Week ${pred.week}`} · {game?.time_et || 'Kickoff unavailable'}</p><p className="font-display text-2xl font-black">{p1}% – {p2}%</p><p className="text-sm font-bold text-brand">Model pick: {pred.predicted_winner}</p></div>
+        <div className="flex items-center justify-start gap-2 md:justify-end">{second?.logo && <img src={second.logo} alt="" className="h-9 w-9" />}<b>{second?.name || pred.team_2}</b></div>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">Prediction timestamp: {snapshotDate(pred.prediction_timestamp)} · {pred.prediction_kind === 'reconstructed' ? 'Historical prediction — not published before kickoff.' : 'Scheduled forecast.'}</p>
+    </section>
+    <section className="rounded-xl border border-slate-200 dark:border-navy-700">
+      <div className="border-b border-slate-100 px-4 py-3 dark:border-navy-800"><b>Team comparison</b><p className="mt-1 text-xs text-slate-500">Trailing pregame values used where available.</p></div>
+      <div className="divide-y divide-slate-100 dark:divide-navy-800">{DETAIL_METRICS.map(([key, label]) => <div key={key} className="grid grid-cols-[1fr_10rem_1fr] gap-2 px-4 py-2 text-xs"><span className="text-right font-semibold">{detailValue(one[key], label)}</span><span className="text-center text-slate-500">{label}</span><span className="font-semibold">{detailValue(two[key], label)}</span></div>)}</div>
+      <p className="px-4 py-2 text-[11px] text-slate-500">Season trend sample: {pred.team_1} has {one.games_played ?? 'Unavailable'} prior games (current-season weight {unavailable(one.current_season_weight) ? 'Unavailable' : `${Math.round(one.current_season_weight * 100)}%`}); {pred.team_2} has {two.games_played ?? 'Unavailable'} ({unavailable(two.current_season_weight) ? 'Unavailable' : `${Math.round(two.current_season_weight * 100)}%`}). Early-season values are shrunk toward the prior season. Yards per drive and explicit matchup-rate fields are unavailable and are not estimated.</p>
+    </section>
+    <div className="grid gap-4 xl:grid-cols-2">
+      <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700"><b>Why the model picked {pred.predicted_winner}</b>{contributions.length ? <ul className="mt-3 space-y-2 text-sm">{contributions.map((item) => <li key={item.feature} className="flex justify-between gap-3"><span>{item.label} <small className="text-slate-500">{item.group}</small></span><span className="text-right text-xs font-semibold">favours {item.favors} ({item.log_odds_contribution > 0 ? '+' : ''}{item.log_odds_contribution})</span></li>)}</ul> : <p className="mt-2 text-sm text-slate-500">Contribution data is unavailable for this row; no synthetic explanation is shown.</p>}<p className="mt-3 text-[11px] text-slate-500">{contributionMethod(pred)}</p></section>
+      <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700"><b>Quarterbacks & injuries</b><p className="mt-2 text-sm text-slate-500">Reliable starter, backup, replacement-quality, and historical injury data is unavailable in this published row.</p><p className="mt-2 text-[11px] text-slate-500">The selected model did not use injury features; current reports are never substituted into predictions.</p></section>
+    </div>
+    <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700"><b>Model accuracy & data quality</b>{model?.metrics?.test ? <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"><span><strong>{Math.round(model.metrics.test.accuracy * 100)}%</strong><small className="block text-slate-500">held-out accuracy</small></span><span><strong>{model.metrics.test.n}</strong><small className="block text-slate-500">team-oriented rows</small></span><span><strong>{model.metrics.test.brier}</strong><small className="block text-slate-500">Brier score</small></span><span><strong>{model.metrics.test.log_loss}</strong><small className="block text-slate-500">log loss</small></span></div> : <p className="mt-2 text-sm text-slate-500">Verified metrics unavailable.</p>}<p className="mt-3 text-[11px] text-slate-500">Held-out season: {model?.test_season ?? 'Unavailable'}. Sportsbook comparison: {dataQuality?.odds || 'Unavailable'}.</p></section>
+  </div>;
+}
+
 function fmt(value, key) {
   if (value === null || value === undefined) return 'n/a';
+  if (key === 'elo_rating') return value.toFixed(1);
   if (key.endsWith('_pct') || key === 'sack_rate') return `${Math.round(value * 100)}%`;
   if (key === 'points_for' || key === 'points_against') return value.toFixed(1);
   if (key === 'turnover_plus') return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
@@ -108,7 +158,7 @@ function ProjectionRow({ pred, grade, expanded, onToggle }) {
   const e2 = pred.explanation ? pred.explanation.team_2 : {};
 
   return (
-    <li className="overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-brand/40 dark:border-navy-800 dark:bg-navy-900">
+    <li className={`matchup overflow-hidden${expanded ? ' matchup-picked' : ''}`}>
       <button
         type="button"
         onClick={onToggle}
@@ -129,6 +179,12 @@ function ProjectionRow({ pred, grade, expanded, onToggle }) {
             style={{ width: `${p1}%`, backgroundColor: t1 ? t1.colors.primary : '#C8102E' }}
           />
         </span>
+        {/* Divider between the two sides of the matchup. */}
+        <span className="flex items-center gap-2" aria-hidden="true">
+          <span className="h-px flex-1 bg-slate-300 dark:bg-navy-600" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">vs</span>
+          <span className="h-px flex-1 bg-slate-300 dark:bg-navy-600" />
+        </span>
         <span className="flex items-center justify-between gap-3">
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
             {t2 ? t2.name : pred.team_2}
@@ -136,6 +192,12 @@ function ProjectionRow({ pred, grade, expanded, onToggle }) {
           <span className="font-display text-base font-black tabular-nums text-navy-900 dark:text-white">
             {p2}%
           </span>
+        </span>
+        <span className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-navy-800">
+          <span
+            className="block h-full rounded-full transition-all duration-500"
+            style={{ width: `${p2}%`, backgroundColor: t2 ? t2.colors.primary : '#C8102E' }}
+          />
         </span>
         <span className="mt-1 flex items-center justify-between gap-2">
           <span
@@ -153,10 +215,16 @@ function ProjectionRow({ pred, grade, expanded, onToggle }) {
                 className={`chip ${
                   grade.outcome === 'correct'
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                    : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                    : grade.outcome === 'tie'
+                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                      : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                 }`}
               >
-                {grade.outcome === 'correct' ? '✓ Correct' : '✗ Incorrect'}
+                {grade.outcome === 'correct'
+                  ? '✓ Correct'
+                  : grade.outcome === 'tie'
+                    ? 'Tie'
+                    : '✗ Incorrect'}
               </span>
             )}
             <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500">
@@ -214,6 +282,7 @@ export default function ModelProjection({ week, games }) {
   const n = Number(week);
   const [live, setLive] = useState(null);
   const [liveInfo, setLiveInfo] = useState(null);
+  const [publishedQuality, setPublishedQuality] = useState(null);
   const [liveTried, setLiveTried] = useState(false);
   const [openIndex, setOpenIndex] = useState(null);
 
@@ -232,60 +301,27 @@ export default function ModelProjection({ week, games }) {
     return ordered.length ? ordered : rows.filter((r) => r && !r.error);
   }, [n, gameKey]);
 
+  // Render API is the production source of truth. The bundled JSON is only a
+  // resilient, versioned fallback when a visitor is offline or Render is down.
   useEffect(() => {
     let cancelled = false;
     setLive(null);
     setLiveInfo(null);
+    setPublishedQuality(null);
     setLiveTried(false);
     setOpenIndex(null);
-    if (!games.length) {
+    getAiProjections(n).then((data) => {
+      const rows = data?.weeks?.[String(n)];
+      if (cancelled || !Array.isArray(rows) || !rows.length) return;
+      setLive(rows);
+      setLiveInfo(data.model || null);
+      setPublishedQuality(data.data_quality || null);
       setLiveTried(true);
-      return;
-    }
-
-    const body = {
-      matchups: games.map((g) => ({
-        team_1: g.home_abbr,
-        team_2: g.away_abbr,
-        season: 2026,
-        week: Number(week),
-        home_team: g.home_abbr,
-        date: g.date,
-      })),
-    };
-
-    (async () => {
-      for (const base of ML_ENDPOINTS) {
-        try {
-          const res = await fetch(`${base}/predict/matchup/batch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          if (!res.ok) continue;
-          const data = await res.json();
-          if (cancelled) return;
-          const rows = (data.matchups || []).filter((m) => m && !m.error);
-          if (rows.length) setLive(rows);
-          fetch(`${base}/model/info`)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((j) => {
-              if (!cancelled && j) setLiveInfo(j);
-            })
-            .catch(() => {});
-          setLiveTried(true);
-          return;
-        } catch {
-          /* service not up: the bundled snapshot stays on screen */
-        }
-      }
+    }).catch(() => {
       if (!cancelled) setLiveTried(true);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [week, gameKey]);
+    });
+    return () => { cancelled = true; };
+  }, [n]);
 
   const rows = live && live.length ? live : snapshotRows;
   const isLive = Boolean(live && live.length);
@@ -362,7 +398,7 @@ export default function ModelProjection({ week, games }) {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
             </span>
-            model live
+            API snapshot
           </span>
         ) : (
           <span
@@ -374,7 +410,7 @@ export default function ModelProjection({ week, games }) {
         )}
       </div>
 
-      <ul className="grid gap-2 p-4 sm:grid-cols-2 xl:grid-cols-3">
+      <ul className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
         {rows.map((pred, i) => (
           <ProjectionRow
             key={`${pred.team_1}-${pred.team_2}-${i}`}
@@ -385,6 +421,13 @@ export default function ModelProjection({ week, games }) {
           />
         ))}
       </ul>
+
+      <FocusDashboard
+        pred={rows[openIndex >= 0 ? openIndex : 0]}
+        game={games.find((game) => game.id === rows[openIndex >= 0 ? openIndex : 0]?.game_id)}
+        model={info}
+        dataQuality={publishedQuality || snapshot.data_quality}
+      />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-3 text-[11px] text-slate-500 dark:border-navy-800 dark:text-slate-400">
         <span>
@@ -409,7 +452,7 @@ export default function ModelProjection({ week, games }) {
           </span>
         )}
         <span>
-          {isLive ? 'Live from the model service.' : 'From the bundled model snapshot.'} Informational
+          {isLive ? 'Loaded from the prediction API.' : 'From the bundled model snapshot.'} Informational
           only, not betting advice.
         </span>
       </div>

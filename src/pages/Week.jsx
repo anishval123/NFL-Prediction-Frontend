@@ -99,6 +99,10 @@ export default function Week() {
           }
         />
 
+        <p className="mt-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          Ties do not impact your record.
+        </p>
+
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {games.map((game, idx) => (
             <GameCard
