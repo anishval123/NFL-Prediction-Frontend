@@ -83,43 +83,6 @@ function contributionMethod(pred) {
   return 'The selected model exposes no feature-level contributions, so none are shown.';
 }
 
-function detailValue(value, label) {
-  if (unavailable(value)) return 'Unavailable';
-  if (/rate|Third|Red zone|Sack/.test(label)) return `${(value * 100).toFixed(1)}%`;
-  return Number(value).toFixed(/Points/.test(label) ? 1 : 3);
-}
-
-function FocusDashboard({ pred, game, model, dataQuality }) {
-  if (!pred) return null;
-  const one = pred.explanation?.team_1 || {};
-  const two = pred.explanation?.team_2 || {};
-  const first = TEAM_BY_ABBR[pred.team_1];
-  const second = TEAM_BY_ABBR[pred.team_2];
-  const contributions = pred.feature_contributions || [];
-  const p1 = Math.round(pred.team_1_win_probability * 100);
-  const p2 = 100 - p1;
-  return <div className="space-y-4 border-t border-slate-100 p-4 dark:border-navy-800">
-    <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700">
-      <div className="grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
-        <div className="flex items-center gap-2">{first?.logo && <img src={first.logo} alt="" className="h-9 w-9" />}<b>{first?.name || pred.team_1}</b></div>
-        <div className="text-center"><p className="text-xs text-slate-500">{game?.date || `Week ${pred.week}`} · {game?.time_et || 'Kickoff unavailable'}</p><p className="font-display text-2xl font-black">{p1}% – {p2}%</p><p className="text-sm font-bold text-brand">Model pick: {pred.predicted_winner}</p></div>
-        <div className="flex items-center justify-start gap-2 md:justify-end">{second?.logo && <img src={second.logo} alt="" className="h-9 w-9" />}<b>{second?.name || pred.team_2}</b></div>
-      </div>
-      <p className="mt-3 text-xs text-slate-500">Prediction timestamp: {snapshotDate(pred.prediction_timestamp)} · {pred.prediction_kind === 'reconstructed' ? 'Historical prediction — not published before kickoff.' : 'Scheduled forecast.'}</p>
-    </section>
-    <section className="rounded-xl border border-slate-200 dark:border-navy-700">
-      <div className="border-b border-slate-100 px-4 py-3 dark:border-navy-800"><b>Team comparison</b><p className="mt-1 text-xs text-slate-500">Trailing pregame values used where available.</p></div>
-      <div className="divide-y divide-slate-100 dark:divide-navy-800">{DETAIL_METRICS.map(([key, label]) => <div key={key} className="grid grid-cols-[1fr_10rem_1fr] gap-2 px-4 py-2 text-xs"><span className="text-right font-semibold">{detailValue(one[key], label)}</span><span className="text-center text-slate-500">{label}</span><span className="font-semibold">{detailValue(two[key], label)}</span></div>)}</div>
-      <p className="px-4 py-2 text-[11px] text-slate-500">Season trend sample: {pred.team_1} has {one.games_played ?? 'Unavailable'} prior games (current-season weight {unavailable(one.current_season_weight) ? 'Unavailable' : `${Math.round(one.current_season_weight * 100)}%`}); {pred.team_2} has {two.games_played ?? 'Unavailable'} ({unavailable(two.current_season_weight) ? 'Unavailable' : `${Math.round(two.current_season_weight * 100)}%`}). Early-season values are shrunk toward the prior season. Yards per drive and explicit matchup-rate fields are unavailable and are not estimated.</p>
-    </section>
-    <div className="grid gap-4 xl:grid-cols-2">
-      <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700"><b>Why the model picked {pred.predicted_winner}</b>{contributions.length ? <ul className="mt-3 space-y-2 text-sm">{contributions.map((item) => <li key={item.feature} className="flex justify-between gap-3"><span>{item.label} <small className="text-slate-500">{item.group}</small></span><span className="text-right text-xs font-semibold">favours {item.favors} ({item.log_odds_contribution > 0 ? '+' : ''}{item.log_odds_contribution})</span></li>)}</ul> : <p className="mt-2 text-sm text-slate-500">Contribution data is unavailable for this row; no synthetic explanation is shown.</p>}<p className="mt-3 text-[11px] text-slate-500">{contributionMethod(pred)}</p></section>
-      <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700"><b>Quarterbacks & injuries</b><p className="mt-2 text-sm text-slate-500">Reliable starter, backup, replacement-quality, and historical injury data is unavailable in this published row.</p><p className="mt-2 text-[11px] text-slate-500">The selected model did not use injury features; current reports are never substituted into predictions.</p></section>
-    </div>
-    <section className="rounded-xl border border-slate-200 p-4 dark:border-navy-700"><b>Model accuracy & data quality</b>{model?.metrics?.test ? <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"><span><strong>{Math.round(model.metrics.test.accuracy * 100)}%</strong><small className="block text-slate-500">held-out accuracy</small></span><span><strong>{model.metrics.test.n}</strong><small className="block text-slate-500">team-oriented rows</small></span><span><strong>{model.metrics.test.brier}</strong><small className="block text-slate-500">Brier score</small></span><span><strong>{model.metrics.test.log_loss}</strong><small className="block text-slate-500">log loss</small></span></div> : <p className="mt-2 text-sm text-slate-500">Verified metrics unavailable.</p>}<p className="mt-3 text-[11px] text-slate-500">Held-out season: {model?.test_season ?? 'Unavailable'}. Sportsbook comparison: {dataQuality?.odds || 'Unavailable'}.</p></section>
-  </div>;
-}
-
 function fmt(value, key) {
   if (value === null || value === undefined) return 'n/a';
   if (key === 'elo_rating') return value.toFixed(1);
@@ -421,13 +384,6 @@ export default function ModelProjection({ week, games }) {
           />
         ))}
       </ul>
-
-      <FocusDashboard
-        pred={rows[openIndex >= 0 ? openIndex : 0]}
-        game={games.find((game) => game.id === rows[openIndex >= 0 ? openIndex : 0]?.game_id)}
-        model={info}
-        dataQuality={publishedQuality || snapshot.data_quality}
-      />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-3 text-[11px] text-slate-500 dark:border-navy-800 dark:text-slate-400">
         <span>
