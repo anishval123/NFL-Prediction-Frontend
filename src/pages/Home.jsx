@@ -41,28 +41,23 @@ export default function Home() {
   return (
     <div className="animate-fadeUp">
       {/* Hero */}
-      <section className="relative overflow-hidden bg-navy-900">
+      <section className="relative overflow-hidden bg-slate-50 text-slate-900 dark:bg-navy-900 dark:text-white">
         <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
-            backgroundSize: '44px 44px',
-          }}
+          className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(15,23,42,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.12)_1px,transparent_1px)] bg-[size:44px_44px] dark:opacity-[0.07] dark:[background-image:linear-gradient(#fff_1px,transparent_1px),linear-gradient(90deg,#fff_1px,transparent_1px)]"
         />
         <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
-        <div className="pointer-events-none absolute -right-20 bottom-0 h-80 w-80 rounded-full bg-navy-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 bottom-0 h-80 w-80 rounded-full bg-slate-300/60 blur-3xl dark:bg-navy-500/20" />
 
         <div className="container-page relative py-14 sm:py-20">
           <div className="flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-14 xl:gap-20">
             <div className="max-w-3xl lg:min-w-0 lg:flex-1">
-              <span className="chip bg-brand/15 text-brand-light">2026 season · Official NFL schedule</span>
-              <h1 className="mt-4 text-5xl font-black uppercase leading-[0.95] tracking-tight text-white sm:text-7xl">
+              <span className="chip bg-brand/15 text-brand-dark dark:text-brand-light">2026 season · Official NFL schedule</span>
+              <h1 className="mt-4 text-5xl font-black uppercase leading-[0.95] tracking-tight text-slate-900 dark:text-white sm:text-7xl">
                 Predict every game.
                 <br />
-                Defeat <span className="text-brand-light">AI</span>
+                Defeat <span className="text-brand-dark dark:text-brand-light">AI</span>
               </h1>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
+              <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300 sm:text-lg">
                 Tap a team, lock in your winner, and come back to see if you
                 outpicked AI.
               </p>
@@ -73,7 +68,7 @@ export default function Home() {
                     <path d="M4 10h12m0 0-5-5m5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </Link>
-                <Link to="/standings" className="btn-ghost-light">Your standings</Link>
+                <Link to="/standings" className="btn-outline border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-900 dark:border-white/20 dark:bg-white/5 dark:text-white dark:hover:border-brand/60 dark:hover:text-white">Your standings</Link>
                 {totalPicked > 0 && (
                   <button
                     type="button"
@@ -82,13 +77,13 @@ export default function Home() {
                         resetAll();
                       }
                     }}
-                    className="btn-outline"
+                    className="btn-outline border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-900 dark:border-white/20 dark:bg-white/5 dark:text-white dark:hover:border-brand/60 dark:hover:text-white"
                   >
                     Reset all picks
                   </button>
                 )}
                 {totalPicked > 0 && (
-                  <span className="chip border border-white/15 bg-white/5 text-slate-200">
+                  <span className="chip border border-slate-300 bg-white/80 text-slate-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200">
                     {totalPicked} picks · {pct}% decided
                   </span>
                 )}
@@ -100,30 +95,30 @@ export default function Home() {
             <aside aria-label="Season records" className="lg:shrink-0">
               <dl className="flex flex-col gap-8 lg:gap-10">
                 <div>
-                  <dt className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                  <dt className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
                     Your Prediction Record
                   </dt>
                   <dd className="mt-2 flex items-baseline gap-3">
-                    <span className="font-display text-5xl font-black text-white tabular-nums sm:text-6xl">
+                    <span className="font-display text-5xl font-black text-slate-900 tabular-nums sm:text-6xl dark:text-white">
                       {userRecord.str}
                     </span>
                     {userRecord.graded > 0 && (
-                      <span className="text-sm font-semibold text-slate-400">
+                      <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
                         {Math.round((userRecord.pct || 0) * 100)}%
                       </span>
                     )}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                  <dt className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
                     AI Season Record
                   </dt>
                   <dd className="mt-2 flex items-baseline gap-3">
-                    <span className="font-display text-5xl font-black text-brand-light tabular-nums sm:text-6xl">
+                    <span className="font-display text-5xl font-black text-brand-dark tabular-nums sm:text-6xl dark:text-brand-light">
                       {modelRecord ? modelRecord.str : '—'}
                     </span>
                     {modelRecord && (
-                      <span className="text-sm font-semibold text-slate-400">
+                      <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
                         {Math.round((modelRecord.pct || 0) * 100)}%
                       </span>
                     )}
@@ -137,13 +132,13 @@ export default function Home() {
             {STATS.map((s, i) => (
               <div
                 key={s.label}
-                className={`rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm${
+                className={`rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-card backdrop-blur-sm dark:border-white/10 dark:bg-white/5 ${
                   i === STATS.length - 1 ? ' col-span-2 sm:col-span-1' : ''
                 }`}
               >
-                <dd className="font-display text-4xl font-bold text-white">{s.value}</dd>
-                <dt className="mt-1 text-xs font-bold uppercase tracking-widest text-slate-400">{s.label}</dt>
-                <p className="text-[11px] text-slate-500">{s.desc}</p>
+                <dd className="font-display text-4xl font-bold text-slate-900 dark:text-white">{s.value}</dd>
+                <dt className="mt-1 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{s.label}</dt>
+                <p className="text-[11px] text-slate-500 dark:text-slate-500">{s.desc}</p>
               </div>
             ))}
           </dl>

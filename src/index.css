@@ -17,6 +17,9 @@
   h1, h2, h3 {
     @apply font-display;
   }
+  [id] {
+    scroll-margin-top: 5.5rem;
+  }
   ::selection {
     background-color: rgba(200, 16, 46, 0.85);
     color: #fff;

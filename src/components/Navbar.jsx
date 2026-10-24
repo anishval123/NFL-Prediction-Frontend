@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { usePicks } from '../context/PicksContext.jsx';
 
@@ -11,12 +11,15 @@ const NAV_LINKS = [
   { to: '/about', label: 'About' },
 ];
 
-function WeekDropdown({ open, onNavigate }) {
+function WeekDropdown({ open, onNavigate, onMenuEnter, onMenuLeave }) {
   return (
     <div
-      className={`absolute left-0 top-full z-50 mt-2 w-[340px] origin-top-left rounded-2xl border border-white/10 bg-navy-800 p-4 shadow-2xl transition-all duration-200 ${
+      onMouseEnter={onMenuEnter}
+      onMouseLeave={onMenuLeave}
+      className={`absolute left-0 top-full z-50 w-[340px] origin-top-left rounded-2xl border border-white/10 bg-navy-800 p-4 shadow-2xl transition-all duration-200 ${
         open ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none -translate-y-1 opacity-0'
       }`}
+      style={{ paddingTop: '0.5rem' }}
     >
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
@@ -54,6 +57,32 @@ export default function Navbar() {
   const location = useLocation();
   const [weekOpen, setWeekOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function onPointerDown(event) {
+      if (!weekOpen) return;
+      const target = event.target;
+      if (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+        setWeekOpen(false);
+      }
+    }
+
+    function onKeyDown(event) {
+      if (event.key === 'Escape') setWeekOpen(false);
+    }
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [weekOpen]);
 
   const onWeekPath = /^\/week\//.test(location.pathname);
   const closeAll = () => {
@@ -79,7 +108,7 @@ export default function Navbar() {
                 2026 NFL <span className="text-brand-light">Pick 'Em</span>
               </span>
               <span className="text-[10px] font-medium uppercase tracking-widest text-slate-400">
-                Predict every game
+                The Eye Test
               </span>
             </span>
           </Link>
@@ -89,12 +118,24 @@ export default function Navbar() {
             <NavLink to="/" end className={navLinkClass}>
               Home
             </NavLink>
-            <div className="relative" onMouseLeave={() => setWeekOpen(false)}>
+            <div
+              ref={menuRef}
+              className="relative"
+              onMouseEnter={() => setWeekOpen(true)}
+              onMouseLeave={() => setWeekOpen(false)}
+              onBlur={(event) => {
+                const next = event.relatedTarget;
+                if (!event.currentTarget.contains(next)) setWeekOpen(false);
+              }}
+            >
               <button
+                ref={triggerRef}
                 type="button"
                 onClick={() => setWeekOpen((v) => !v)}
                 onMouseEnter={() => setWeekOpen(true)}
+                onFocus={() => setWeekOpen(true)}
                 aria-expanded={weekOpen}
+                aria-haspopup="menu"
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all duration-150 ${
                   onWeekPath
                     ? 'bg-white/10 text-white'
@@ -107,7 +148,12 @@ export default function Navbar() {
                 </svg>
               </button>
               {onWeekPath && <span className="absolute inset-x-2.5 -bottom-0.5 h-0.5 rounded-full bg-brand" />}
-              <WeekDropdown open={weekOpen} onNavigate={closeAll} />
+              <WeekDropdown
+                open={weekOpen}
+                onNavigate={closeAll}
+                onMenuEnter={() => setWeekOpen(true)}
+                onMenuLeave={() => setWeekOpen(false)}
+              />
             </div>
             {NAV_LINKS.map((link) => (
               <NavLink key={link.to} to={link.to} className={navLinkClass}>
@@ -138,13 +184,11 @@ export default function Navbar() {
               className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 transition hover:border-gold hover:bg-white/10 hover:text-gold"
             >
               {dark ? (
-                // light bulb when currently dark (button switches to light)
                 <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M9 18h6" strokeLinecap="round" strokeLinejoin="round" />
                   <path d="M12 2a7 7 0 00-4 12v3h8v-3a7 7 0 00-4-12z" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               ) : (
-                // crescent moon when currently light (button switches to dark)
                 <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
