@@ -112,7 +112,7 @@ export default function About() {
           </div>
           <div className="mt-4 space-y-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
             <p>
-              Every win probability in <strong className="text-navy-800 dark:text-white">AI Insight</strong> comes from a walk-forward <strong className="text-navy-800 dark:text-white">Elo rating model</strong>. It uses only games completed before the week being predicted. It ignores injuries, betting odds, and your picks.
+              Every win probability in <strong className="text-navy-800 dark:text-white">AI Insight</strong> comes from a walk-forward <strong className="text-navy-800 dark:text-white">Elo rating model</strong>. It uses only games completed before the week being predicted.
             </p>
 
             <div>
